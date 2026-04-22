@@ -5,7 +5,9 @@
 A browser extension that adds beautiful animated backgrounds to YouTube Music using [Kawarp](https://kawarp.boidu.dev) - creating fluid, warped visuals from album artwork. Built with Plasmo, React, and TypeScript.
 
 > [!WARNING]
-> Although optional, it is **highly recommended** to use this extension alongside [Better Lyrics](https://github.com/boidushya/better-lyrics).
+> This extension is specifically designed to be used with [Glassy Music](https://github.com/NanKillBro/glassy-music-nankill) and may not function properly when run in a standard web browser.
+>
+> Although optional, it is also **highly recommended** to use this extension alongside [Better Lyrics](https://github.com/boidushya/better-lyrics).
 
 ## Download
 
