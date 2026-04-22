@@ -29,21 +29,21 @@ export interface DynamicMultipliers {
 export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   enabled: true,
   // Kawarp defaults (matching @kawarp/core defaults)
-  kawarpOpacity: 0.75,
-  kawarpWarpIntensity: 1.0,
+  kawarpOpacity: 0.8,
+  kawarpWarpIntensity: 1,
   kawarpBlurPasses: 8,
-  kawarpAnimationSpeed: 1.0,
-  kawarpTransitionDuration: 1000,
-  kawarpSaturation: 1.5,
+  kawarpAnimationSpeed: 1.5,
+  kawarpTransitionDuration: 1500,
+  kawarpSaturation: 2,
   kawarpDithering: 0.008,
   kawarpAudioScaleBoost: 2,
   // Audio responsive
   audioResponsive: true,
-  audioSpeedMultiplier: 4,
-  audioBeatThreshold: 0.75,
+  audioSpeedMultiplier: 2,
+  audioBeatThreshold: 0.8,
   pauseOnInactive: true,
   // Other settings
-  showLogs: false,
+  showLogs: true,
   showOnBrowsePages: false,
   // Animated album art
   enableAnimatedArt: true,
