@@ -317,10 +317,10 @@ export const createKawarp = async (
     : `
       --sidebar: 240px;
       position: absolute;
-      top: -64px;
+      top: -122px;
       left: calc(-1 * var(--sidebar));
       width: calc(100% + var(--sidebar));
-      height: calc(100% + 128px);
+      height: calc(100% + 205px);
       pointer-events: none;
       z-index: -2;
       background-color: #000;
@@ -345,10 +345,10 @@ export const createKawarp = async (
     : `
       --sidebar: 240px;
       position: absolute;
-      top: -64px;
+      top: -122px;
       left: calc(-1 * var(--sidebar));
       width: calc(100% + var(--sidebar));
-      height: calc(100% + 128px);
+      height: calc(100% + 205px);
       pointer-events: none;
       z-index: -1;
       opacity: 0;

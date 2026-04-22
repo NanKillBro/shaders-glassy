@@ -6,7 +6,7 @@ import {
 } from "@/shared/constants/gradientSettings";
 import { logger } from "@/shared/utils/logger";
 
-const storage = new Storage();
+const storage = new Storage({ area: "local" });
 
 interface LegacySettings {
   showOnHomepage?: boolean;

@@ -7,7 +7,7 @@ import {
   type GradientSettings,
 } from "@/shared/constants/gradientSettings";
 
-const storage = new Storage();
+const storage = new Storage({ area: "local" });
 
 interface LegacySettings {
   shaderType?: string;

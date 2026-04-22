@@ -14,14 +14,6 @@ async function migrateStaleSyncCache(): Promise<void> {
     const flag = await storage.get<boolean>(MIGRATION_FLAG_KEY);
     if (flag) return;
 
-    const allSync = await chrome.storage.sync.get(null);
-    const staleKeys = Object.keys(allSync).filter(key => key.startsWith("bls_"));
-
-    if (staleKeys.length > 0) {
-      await chrome.storage.sync.remove(staleKeys);
-      logger.log(`Animated art: migrated ${staleKeys.length} stale cache entries out of sync storage`);
-    }
-
     await storage.set(MIGRATION_FLAG_KEY, true);
   } catch (error) {
     logger.log("Animated art: migration error", error);
