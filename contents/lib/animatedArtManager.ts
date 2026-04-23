@@ -72,6 +72,16 @@ let currentPlayerData: PlayerData | null = null;
 let lastProcessedVideoId: string | null = null;
 let pendingFetch: AbortController | null = null;
 
+// ── Crossfade state ──
+// Khi chuyển bài, video cũ được giữ lại làm "dummy" để fade-out mượt mà
+// thay vì bị xóa ngay lập tức (gây lộ thumbnail bên dưới).
+// ID cố định "bls-video-crossfade-dummy" được dùng như contract ngầm
+// với fix.js — fix.js check DOM cho ID này để skip image crossfade,
+// tránh artifact "double-fade" (2 lớp fade cùng lúc).
+let crossfadeDummy: HTMLVideoElement | null = null;
+let crossfadeFadeTimer: ReturnType<typeof setTimeout> | null = null;
+let crossfadeSafetyTimer: ReturnType<typeof setTimeout> | null = null;
+
 const videoIdToAlbumMap = new Map<string, string>();
 
 function abortPendingFetch(): void {
@@ -352,6 +362,20 @@ function injectAnimatedArt(videoUrl: string): void {
 
   thumbnail.style.isolation = "isolate";
   const video = createVideoElement(videoUrl);
+
+  // Video→Video crossfade: Nếu đang có dummy (video cũ),
+  // chờ video mới canplay rồi fade-out dummy.
+  // Kết quả: video cũ fade-out mượt mà, video mới hiện ra bên dưới.
+  if (crossfadeDummy) {
+    video.addEventListener("canplay", () => {
+      startCrossfadeFadeOut();
+    }, { once: true });
+    // Backup: Nếu video mới load lỗi → vẫn fade dummy đi để không kẹt
+    video.addEventListener("error", () => {
+      startCrossfadeFadeOut();
+    }, { once: true });
+  }
+
   thumbnail.appendChild(video);
 
   logger.log("Animated art: video injected");
@@ -359,6 +383,74 @@ function injectAnimatedArt(videoUrl: string): void {
 
 function getVideoElement(): HTMLVideoElement | null {
   return document.querySelector(`#${VIDEO_ELEMENT_ID}`);
+}
+
+// ── Crossfade utilities ──
+
+// Dọn dẹp crossfade dummy ngay lập tức (huỷ timer, xóa element).
+// Dùng khi: cần cancel fade giữa chừng, fade xong, hoặc cleanup.
+function killCrossfadeDummy(): void {
+  if (crossfadeSafetyTimer) { clearTimeout(crossfadeSafetyTimer); crossfadeSafetyTimer = null; }
+  if (crossfadeFadeTimer) { clearTimeout(crossfadeFadeTimer); crossfadeFadeTimer = null; }
+  if (crossfadeDummy) {
+    crossfadeDummy.remove();
+    crossfadeDummy = null;
+  }
+}
+
+// Bắt đầu fade-out cho dummy. Sau 650ms (transition 600ms + buffer 50ms), xóa dummy.
+function startCrossfadeFadeOut(): void {
+  if (!crossfadeDummy || !crossfadeDummy.parentElement) {
+    killCrossfadeDummy();
+    return;
+  }
+  if (crossfadeSafetyTimer) { clearTimeout(crossfadeSafetyTimer); crossfadeSafetyTimer = null; }
+
+  logger.log("Animated art: crossfade fade-out started");
+  void crossfadeDummy.offsetWidth; // force reflow để transition nhận opacity hiện tại
+  crossfadeDummy.style.opacity = "0";
+
+  const dummy = crossfadeDummy;
+  crossfadeFadeTimer = setTimeout(() => {
+    if (dummy.parentElement) dummy.remove();
+    if (crossfadeDummy === dummy) crossfadeDummy = null;
+    crossfadeFadeTimer = null;
+    logger.log("Animated art: crossfade dummy removed after fade");
+  }, 650);
+}
+
+// Chuyển video hiện tại thành crossfade dummy.
+// Video được đổi ID và nâng z-index để che thumbnail trong lúc chờ artwork mới.
+// Đổi ID không ảnh hưởng playback — id chỉ là DOM identifier,
+// không liên quan media pipeline → video vẫn chạy liên tục.
+function holdCurrentVideoAsDummy(): void {
+  const currentVideo = getVideoElement();
+  if (!currentVideo || !currentVideo.parentElement) return;
+
+  // Dọn dummy cũ nếu còn (trường hợp chuyển bài liên tục nhanh)
+  killCrossfadeDummy();
+
+  // Đổi ID để không conflict với video mới sẽ được tạo bởi injectAnimatedArt().
+  // ID "bls-video-crossfade-dummy" cũng được fix.js dùng để detect
+  // và skip image crossfade, tránh double-fade artifact.
+  currentVideo.id = "bls-video-crossfade-dummy";
+  currentVideo.style.transition = "opacity 0.6s ease-in-out";
+  currentVideo.style.zIndex = "6"; // Trên video mới (z-index: 2)
+  currentVideo.style.pointerEvents = "none";
+
+  crossfadeDummy = currentVideo;
+
+  // Safety timeout: Nếu sau 6s không có gì trigger fade → force fade-out.
+  // Phòng trường hợp: API chậm, video mới không load được, v.v.
+  crossfadeSafetyTimer = setTimeout(() => {
+    if (crossfadeDummy === currentVideo) {
+      logger.log("Animated art: crossfade safety timeout, forcing fade-out");
+      startCrossfadeFadeOut();
+    }
+    crossfadeSafetyTimer = null;
+  }, 2000);
+
+  logger.log("Animated art: holding old video as crossfade dummy");
 }
 
 function removeAnimatedArt(): void {
@@ -369,6 +461,13 @@ function removeAnimatedArt(): void {
   video.remove();
   if (thumbnail) {
     thumbnail.style.isolation = "";
+  }
+
+  // Video→Static: Khi API trả null (không có animated art cho bài mới),
+  // video cũ đã được hold làm dummy → fade-out nó ngay.
+  // Ảnh static bên dưới đã sẵn sàng (hoặc đang load) → fade mượt mà.
+  if (crossfadeDummy) {
+    startCrossfadeFadeOut();
   }
 }
 
@@ -415,9 +514,13 @@ function handlePlayerTime(event: Event): void {
   const { videoId, song, artist, duration } = customEvent.detail;
 
   if (currentPlayerData && currentPlayerData.videoId !== videoId) {
-    logger.log("Animated art: song changed, clearing old artwork");
+    logger.log("Animated art: song changed, preparing for crossfade");
     abortPendingFetch();
-    removeAnimatedArt();
+    // Giữ video cũ làm dummy để crossfade mượt mà.
+    // Video sẽ được fade-out khi artwork mới sẵn sàng (canplay) hoặc khi
+    // API trả null (removeAnimatedArt) hoặc timeout 6s.
+    // KHÔNG gọi removeAnimatedArt() ở đây — sẽ lộ thumbnail bên dưới.
+    holdCurrentVideoAsDummy();
     lastProcessedVideoId = null;
   }
 
@@ -467,6 +570,7 @@ export function setEnabled(enabled: boolean): void {
 
 export function cleanup(): void {
   abortPendingFetch();
+  killCrossfadeDummy(); // Dọn crossfade state trước khi cleanup
 
   document.removeEventListener("bls-send-player-time", handlePlayerTime);
   document.removeEventListener("bls-send-response", handleApiResponse);
