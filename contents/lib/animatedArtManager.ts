@@ -448,7 +448,7 @@ function holdCurrentVideoAsDummy(): void {
       startCrossfadeFadeOut();
     }
     crossfadeSafetyTimer = null;
-  }, 2000);
+  }, 1000);
 
   logger.log("Animated art: holding old video as crossfade dummy");
 }
