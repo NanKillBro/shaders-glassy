@@ -308,7 +308,7 @@ export const createKawarp = async (
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 0;
+      z-index: -2;
       background-color: #000;
       opacity: 0;
       will-change: opacity;
@@ -337,7 +337,7 @@ export const createKawarp = async (
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 0;
+      z-index: -1;
       opacity: 0;
       will-change: opacity, transform;
       transition: opacity 0.5s ease-out;
