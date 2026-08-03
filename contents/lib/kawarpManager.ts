@@ -5,6 +5,7 @@ import { logger } from "@/shared/utils/logger";
 interface KawarpState {
   backdrop: HTMLDivElement | null;
   container: HTMLDivElement | null;
+  target: HTMLElement | null;
   canvas: HTMLCanvasElement | null;
   instance: Kawarp | null;
   currentImageUrl: string | null;
@@ -27,6 +28,7 @@ interface KawarpState {
 const createEmptyState = (): KawarpState => ({
   backdrop: null,
   container: null,
+  target: null,
   canvas: null,
   instance: null,
   currentImageUrl: null,
@@ -294,6 +296,13 @@ export const createKawarp = async (
     existingKawarp.remove();
   }
 
+  // The layers sit at negative z-index so page content paints above them. That only scopes
+  // correctly when the target establishes a stacking context: #player-page already does via
+  // its own z-index, but the browse and search targets do not, and without this the layers
+  // escape to the root stacking context and render beneath YouTube Music's own page gradient.
+  state.target = targetElement as HTMLElement;
+  state.target.style.isolation = "isolate";
+
   state.container = document.createElement("div");
   state.container.id = `better-lyrics-kawarp-${location}`;
   const isBrowsePage = targetSelector !== "player-page";
@@ -308,7 +317,7 @@ export const createKawarp = async (
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 0;
+      z-index: -2;
       background-color: #000;
       opacity: 0;
       will-change: opacity;
@@ -337,7 +346,7 @@ export const createKawarp = async (
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 0;
+      z-index: -1;
       opacity: 0;
       will-change: opacity, transform;
       transition: opacity 0.5s ease-out;
@@ -471,6 +480,10 @@ export const destroyKawarp = (location?: string): void => {
     if (state.backdrop) {
       state.backdrop.remove();
       state.backdrop = null;
+    }
+    if (state.target) {
+      state.target.style.removeProperty("isolation");
+      state.target = null;
     }
     state.canvas = null;
     state.currentImageUrl = null;
