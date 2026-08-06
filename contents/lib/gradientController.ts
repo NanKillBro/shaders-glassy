@@ -7,6 +7,7 @@ import { logger } from "@/shared/utils/logger";
 import * as animatedArtManager from "./animatedArtManager";
 import * as audioAnalysis from "./audioAnalysis";
 import * as kawarpManager from "./kawarpManager";
+import * as pipManager from "./pipManager";
 import * as storage from "./storage";
 
 let gradientSettings: GradientSettings;
@@ -178,6 +179,7 @@ export const updateGradientSettings = async (settings: GradientSettings): Promis
         audioAnalysis.startAudioAnalysis(settings, handleBeatDetected);
       }
     }
+    pipManager.sync();
     return;
   }
 
