@@ -268,11 +268,12 @@ export const createKawarp = async (
     return false;
   }
 
-  const state = getKawarpState(location);
+  let state = getKawarpState(location);
 
   if (state.instance) {
     logger.log(`Kawarp already exists for ${location}, destroying first`);
     destroyKawarp(location);
+    state = getKawarpState(location);
   }
 
   creationInProgress.add(location);
