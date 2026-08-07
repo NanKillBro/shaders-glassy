@@ -9,15 +9,22 @@ const BACKDROP_SELECTOR = ".blyrics-pip-backdrop";
 const SUPPRESSION_STYLE_ID = "better-lyrics-shaders-backdrop-suppression";
 const SHELL_TIMEOUT_MS = 5000;
 
-// Gecko hands a content script a cross-origin wrapper on the Picture-in-Picture window, so nothing
-// in this world can script it. Fixed in Firefox 154 (bugzilla 2045666 and 2053139), but 153 is the
-// current release, so every shipping Firefox lands here. `wrappedJSObject` is the Xray marker that
-// identifies the restricted sandbox, and is the same check Better Lyrics uses to decide whether to
-// delegate its own window to the page world.
+// Some Gecko builds hand a content script a cross-origin wrapper on the Picture-in-Picture window,
+// where the first property access throws (bugzilla 2045666 and 2053139). Rather than infer that
+// from the browser or a version number, touch the window once and latch the answer: Firefox 153
+// scripts it fine from an MV2 content script, so a version gate would disable a path that works.
 //
-// This is checked once and up front rather than left to the try/catch in createPipKawarp, because
-// that path would throw and log on every song change for the lifetime of the tab.
-const isRestrictedSandbox = "wrappedJSObject" in window;
+// Latched rather than retried because the alternative is throwing and logging on every song change
+// for the lifetime of the tab.
+let isWindowUnreachable = false;
+
+const canScript = (pipWindow: Window): boolean => {
+  try {
+    return !!pipWindow.document.body;
+  } catch {
+    return false;
+  }
+};
 
 interface PipSession {
   window: Window;
@@ -98,10 +105,16 @@ const teardown = (owner?: Window): void => {
 
 // `session` is only assigned after two awaits, so it cannot guard against a second entry on its own.
 const mount = async (): Promise<void> => {
-  if (session || isMounting || !getSettings || !getMultipliers) return;
+  if (session || isMounting || isWindowUnreachable || !getSettings || !getMultipliers) return;
 
   const pipWindow = window.documentPictureInPicture?.window;
   if (!pipWindow) return;
+
+  if (!canScript(pipWindow)) {
+    isWindowUnreachable = true;
+    logger.log("This browser does not allow scripting the floating window, disabling the effect");
+    return;
+  }
 
   isMounting = true;
   try {
@@ -153,11 +166,6 @@ export const initialize = (dependencies: {
   getSettings: () => GradientSettings;
   getMultipliers: () => DynamicMultipliers;
 }): void => {
-  if (isRestrictedSandbox) {
-    logger.log("This browser does not let a content script reach the floating window, skipping");
-    return;
-  }
-
   getSettings = dependencies.getSettings;
   getMultipliers = dependencies.getMultipliers;
 
