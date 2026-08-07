@@ -38,7 +38,7 @@ const initializeApp = async (): Promise<void> => {
     clearAnimatedArtCache: animatedArtManager.clearCache,
   });
 
-  audioAnalysis.initializeAudioAnalysis();
+  audioAnalysis.initializeAudioAnalysis(settings.showLogs);
 
   setTimeout(async () => {
     await gradientController.checkAndUpdateGradient();
