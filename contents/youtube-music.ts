@@ -6,6 +6,7 @@ import * as gradientController from "./lib/gradientController";
 import * as kawarpManager from "./lib/kawarpManager";
 import * as messageHandler from "./lib/messageHandler";
 import * as navigationManager from "./lib/navigationManager";
+import * as pipManager from "./lib/pipManager";
 
 export const config: PlasmoCSConfig = {
   matches: ["https://music.youtube.com/*"],
@@ -58,11 +59,17 @@ const initializeApp = async (): Promise<void> => {
     gradientController.startAudioIfEnabled();
 
     navigationManager.initialize(gradientController.checkAndUpdateGradient);
+
+    pipManager.initialize({
+      getSettings: gradientController.getSettings,
+      getMultipliers: gradientController.getDynamicMultipliers,
+    });
   }, 0);
 };
 
 const cleanup = (): void => {
   navigationManager.cleanup();
+  pipManager.cleanup();
   gradientController.cleanup();
 };
 
