@@ -53,6 +53,7 @@ const suppressBuiltInBackdrop = (pipWindow: Window): HTMLStyleElement => {
 let session: PipSession | null = null;
 let openObserver: MutationObserver | null = null;
 let isMounting = false;
+let isSyncPending = false;
 let getSettings: (() => GradientSettings) | null = null;
 let getMultipliers: (() => DynamicMultipliers) | null = null;
 
@@ -103,6 +104,17 @@ const teardown = (owner?: Window): void => {
   session = null;
 };
 
+const isPipEffectWanted = (): boolean =>
+  document.documentElement.hasAttribute(PIP_OPEN_ATTRIBUTE) && getSettings?.().enabled === true;
+
+// Identity is not liveness. For roughly 50ms after close, documentPictureInPicture.window still
+// hands back the same dead window, while `closed` flips synchronously. Without the `closed` term a
+// mount can finish against a window whose pagehide has already fired, leaving `session` bound to a
+// window that can never tear itself down. Keep this call adjacent to the pagehide registration
+// below: the stretch between them must stay synchronous for that guarantee to hold.
+const canFinishMount = (pipWindow: Window): boolean =>
+  !pipWindow.closed && window.documentPictureInPicture?.window === pipWindow && isPipEffectWanted();
+
 // `session` is only assigned after two awaits, so it cannot guard against a second entry on its own.
 const mount = async (): Promise<void> => {
   if (session || isMounting || isWindowUnreachable || !getSettings || !getMultipliers) return;
@@ -125,17 +137,14 @@ const mount = async (): Promise<void> => {
       return;
     }
 
-    // The window can close, or be replaced, while waitForShell is pending.
-    if (window.documentPictureInPicture?.window !== pipWindow) return;
+    if (!canFinishMount(pipWindow)) return;
 
     const settings = getSettings();
     const mounted = await kawarpManager.createPipKawarp(pipWindow, settings, getMultipliers(), readArtworkUrl(shell));
     if (!mounted) return;
     hasInstance = true;
 
-    // createPipKawarp awaits an image load, so the window can close inside it. sync() cannot catch
-    // that: session is still null at this point, so it sees nothing to tear down.
-    if (window.documentPictureInPicture?.window !== pipWindow) return;
+    if (!canFinishMount(pipWindow)) return;
 
     const suppressionStyle = suppressBuiltInBackdrop(pipWindow);
 
@@ -154,15 +163,30 @@ const mount = async (): Promise<void> => {
     // nothing else holds a handle, so teardown() and sync() have nothing to act on. Covers both
     // the window closing mid-mount and anything below it throwing.
     if (hasInstance && !session) kawarpManager.destroyKawarp(kawarpManager.PIP_LOCATION);
+
+    // Replayed last: a sync replayed before the cleanup above would start a mount whose still-null
+    // session makes `hasInstance && !session` destroy the state it is building. Clearing the flag
+    // first keeps a sync that lands during the replayed mount from being swallowed in turn.
+    if (isSyncPending) {
+      isSyncPending = false;
+      sync();
+    }
   }
 };
 
 // Exported because the popup can toggle `enabled` while the window is already open, and no attribute
 // changes when it does.
 export const sync = (): void => {
-  const shouldRun = document.documentElement.hasAttribute(PIP_OPEN_ATTRIBUTE) && getSettings?.().enabled === true;
-  if (shouldRun && !session) void mount();
-  else if (!shouldRun && session) teardown();
+  // A mount is a long await chain that cannot observe state changes, and it assigns `session` last,
+  // so a sync arriving mid-mount matches neither branch below. Record it and reconcile once it lands.
+  if (isMounting) {
+    isSyncPending = true;
+    return;
+  }
+
+  const isWanted = isPipEffectWanted();
+  if (isWanted && !session) void mount();
+  else if (!isWanted && session) teardown();
 };
 
 export const initialize = (dependencies: {
@@ -186,5 +210,7 @@ export const initialize = (dependencies: {
 export const cleanup = (): void => {
   openObserver?.disconnect();
   openObserver = null;
+  // Without this an in-flight mount's replay would remount right after an explicit teardown.
+  isSyncPending = false;
   teardown();
 };
