@@ -117,6 +117,7 @@ const mount = async (): Promise<void> => {
   }
 
   isMounting = true;
+  let hasInstance = false;
   try {
     const shell = await waitForShell(pipWindow);
     if (!shell) {
@@ -130,13 +131,11 @@ const mount = async (): Promise<void> => {
     const settings = getSettings();
     const mounted = await kawarpManager.createPipKawarp(pipWindow, settings, getMultipliers(), readArtworkUrl(shell));
     if (!mounted) return;
+    hasInstance = true;
 
     // createPipKawarp awaits an image load, so the window can close inside it. sync() cannot catch
     // that: session is still null at this point, so it sees nothing to tear down.
-    if (window.documentPictureInPicture?.window !== pipWindow) {
-      kawarpManager.destroyKawarp(kawarpManager.PIP_LOCATION);
-      return;
-    }
+    if (window.documentPictureInPicture?.window !== pipWindow) return;
 
     const suppressionStyle = suppressBuiltInBackdrop(pipWindow);
 
@@ -151,6 +150,10 @@ const mount = async (): Promise<void> => {
     session = { window: pipWindow, shell, artObserver, suppressionStyle };
   } finally {
     isMounting = false;
+    // Every exit between creating the instance and recording the session leaves it unreachable:
+    // nothing else holds a handle, so teardown() and sync() have nothing to act on. Covers both
+    // the window closing mid-mount and anything below it throwing.
+    if (hasInstance && !session) kawarpManager.destroyKawarp(kawarpManager.PIP_LOCATION);
   }
 };
 
