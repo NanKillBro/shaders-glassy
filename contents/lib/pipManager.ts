@@ -28,7 +28,6 @@ const canScript = (pipWindow: Window): boolean => {
 
 interface PipSession {
   window: Window;
-  shell: HTMLElement;
   artObserver: MutationObserver;
   suppressionStyle: HTMLStyleElement;
 }
@@ -156,7 +155,7 @@ const mount = async (): Promise<void> => {
 
     pipWindow.addEventListener("pagehide", () => teardown(pipWindow), { once: true });
 
-    session = { window: pipWindow, shell, artObserver, suppressionStyle };
+    session = { window: pipWindow, artObserver, suppressionStyle };
   } finally {
     isMounting = false;
     // Every exit between creating the instance and recording the session leaves it unreachable:
