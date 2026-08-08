@@ -1,7 +1,6 @@
-// An AudioContext and its MediaElementAudioSourceNode belong to the realm that
-// created them, and two extensions share no realm except the page's own, so the
-// graph lives in the page world and only plain data crosses. postMessage rather
-// than CustomEvent detail, which needs cloneInto under Gecko's Xrays.
+// Two extensions share no realm except the page's own, so the graph lives there
+// and only plain data crosses. postMessage rather than CustomEvent detail, which
+// needs cloneInto under Gecko's Xrays.
 
 interface AnalysisSettings {
   audioResponsive: boolean;
@@ -50,8 +49,8 @@ const postAudioMessage = (message: AudioCommand | AudioResult): void => {
   window.postMessage(message, window.location.origin);
 };
 
-// createMediaElementSource may be called once per element for the life of the
-// page. Whichever extension claims it first publishes here; the other reuses.
+// createMediaElementSource may be called once per element, ever. First claimer
+// publishes here, everyone else reuses.
 const AUDIO_BUS_KEY = "__blyricsAudio";
 const AUDIO_BUS_VERSION = 1;
 

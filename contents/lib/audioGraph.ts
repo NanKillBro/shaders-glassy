@@ -8,12 +8,9 @@ import {
   type SharedAudioBus,
 } from "./audioBridge";
 
-// The Web Audio half of what contents/lib/audioAnalysis.ts used to do alone;
-// that module is now the isolated-world facade over this one. It runs in the
-// page world, injected by contents/inject-main-world.ts rather than declared as
-// a content script, because Plasmo implements world: "MAIN" through
-// chrome.scripting.registerContentScripts, which has no working equivalent in
-// the Firefox MV2 build.
+// Runs in the page world, injected by contents/inject-main-world.ts rather than
+// declared with Plasmo's world: "MAIN", which throws on the Firefox MV2 build.
+// audioAnalysis.ts is the isolated-world facade over this.
 
 const ANALYSIS_INTERVAL = 100;
 const MIN_VOLUME_FOR_ANALYSIS = 0.005;
@@ -111,8 +108,7 @@ const acquireBus = (element: HTMLMediaElement): SharedAudioBus | null => {
   }
   claimedElements.add(element);
 
-  // Only the owner routes to the destination; reusing a bus and connecting again
-  // would play the original twice.
+  // Only the owner routes to the destination, or the original plays twice.
   source.connect(context.destination);
 
   const bus: SharedAudioBus = { version: 1, context, source, element };
@@ -134,8 +130,7 @@ const bindTo = (element: HTMLMediaElement): boolean => {
 const initialize = (): void => {
   if (state.isInitialized) return;
 
-  // A repeated initialize command must not leave a second retry timer behind,
-  // or every command doubles the polling rate for as long as no element exists.
+  // Without this, every repeated command doubles the retry rate.
   if (state.initTimeoutId !== null) {
     clearTimeout(state.initTimeoutId);
     state.initTimeoutId = null;

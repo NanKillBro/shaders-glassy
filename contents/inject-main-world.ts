@@ -14,9 +14,8 @@ function injectScript(fileName: string): void {
   (document.head || document.documentElement).appendChild(script);
 }
 
-// A url: import resolves against the page rather than the extension, so only
-// the hashed filename survives the trip. Plasmo adds that same hashed name to
-// web_accessible_resources on our behalf.
+// A url: import resolves against the page, so only the hashed filename is usable
+// here. Plasmo adds that name to web_accessible_resources itself.
 function injectBundle(bundleUrl: string): void {
   const fileName = bundleUrl.split("/").pop()?.split("?")[0];
   if (fileName) injectScript(fileName);

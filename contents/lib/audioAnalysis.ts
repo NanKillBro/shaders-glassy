@@ -1,8 +1,8 @@
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
 import { isAudioResult, postAudioMessage } from "./audioBridge";
 
-// The Web Audio graph lives in contents/lib/audioGraph.ts; this drives it and
-// keeps the element listeners, which need no AudioContext and so stay here.
+// Drives the page-world graph in audioGraph.ts. The element listeners need no
+// AudioContext, so they stay on this side.
 
 interface FacadeState {
   element: HTMLMediaElement | null;
@@ -96,9 +96,7 @@ window.addEventListener("message", event => {
   const data: unknown = event.data;
   if (!isAudioResult(data)) return;
 
-  // The graph announces itself on load because these two scripts race: whichever
-  // loses would otherwise post into a window nobody is listening on yet, and a
-  // dropped initialize leaves the effects unreactive until a reload.
+  // The two scripts race, and a loser posts into a window nobody is listening on.
   if (data.type === "bls-audio-ready") {
     if (state.pendingInitialize) postInitialize(state.pendingInitialize.showLogs);
     return;
@@ -107,8 +105,7 @@ window.addEventListener("message", event => {
   if (data.type === "bls-audio-initialized") {
     state.isInitialized = true;
     state.pendingInitialize = null;
-    // The graph is claimed a round trip after the caller asked, so a start
-    // issued against the old synchronous flag would otherwise be dropped.
+    // A start issued before the claim landed would otherwise be dropped.
     if (state.pendingStart) postStart(state.pendingStart.settings);
     return;
   }
