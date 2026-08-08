@@ -17,6 +17,7 @@ type AudioCommand =
   | { type: "bls-audio-reconnect" };
 
 type AudioResult =
+  | { type: "bls-audio-ready" }
   | { type: "bls-audio-initialized" }
   | { type: "bls-audio-beat"; speedMultiplier: number; scaleMultiplier: number };
 
@@ -27,7 +28,7 @@ const AUDIO_COMMAND_TYPES: readonly string[] = [
   "bls-audio-reconnect",
 ];
 
-const AUDIO_RESULT_TYPES: readonly string[] = ["bls-audio-initialized", "bls-audio-beat"];
+const AUDIO_RESULT_TYPES: readonly string[] = ["bls-audio-ready", "bls-audio-initialized", "bls-audio-beat"];
 
 const messageType = (data: unknown): string | null => {
   if (typeof data !== "object" || data === null) return null;

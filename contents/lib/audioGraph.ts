@@ -1,4 +1,3 @@
-import type { PlasmoCSConfig } from "plasmo";
 import { logger } from "@/shared/utils/logger";
 import {
   type AnalysisSettings,
@@ -7,16 +6,14 @@ import {
   publishSharedAudioBus,
   readSharedAudioBus,
   type SharedAudioBus,
-} from "./lib/audioBridge";
+} from "./audioBridge";
 
 // The Web Audio half of what contents/lib/audioAnalysis.ts used to do alone;
-// that module is now the isolated-world facade over this one.
-
-export const config: PlasmoCSConfig = {
-  matches: ["https://music.youtube.com/*"],
-  all_frames: false,
-  world: "MAIN",
-};
+// that module is now the isolated-world facade over this one. It runs in the
+// page world, injected by contents/inject-main-world.ts rather than declared as
+// a content script, because Plasmo implements world: "MAIN" through
+// chrome.scripting.registerContentScripts, which has no working equivalent in
+// the Firefox MV2 build.
 
 const ANALYSIS_INTERVAL = 100;
 const MIN_VOLUME_FOR_ANALYSIS = 0.005;
@@ -137,13 +134,19 @@ const bindTo = (element: HTMLMediaElement): boolean => {
 const initialize = (): void => {
   if (state.isInitialized) return;
 
+  // A repeated initialize command must not leave a second retry timer behind,
+  // or every command doubles the polling rate for as long as no element exists.
+  if (state.initTimeoutId !== null) {
+    clearTimeout(state.initTimeoutId);
+    state.initTimeoutId = null;
+  }
+
   try {
     const element = currentElement();
     if (!element) {
       state.initTimeoutId = window.setTimeout(initialize, INIT_RETRY_MS);
       return;
     }
-    state.initTimeoutId = null;
 
     if (!bindTo(element)) return;
 
@@ -251,3 +254,5 @@ window.addEventListener("message", event => {
       break;
   }
 });
+
+postAudioMessage({ type: "bls-audio-ready" });

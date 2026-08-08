@@ -18,6 +18,7 @@
       "@/popup/*": ["./popup/*"]
     }
   },
+  "files": ["./node_modules/plasmo/templates/plasmo.d.ts"],
   "include": [".plasmo/index.d.ts", "**/*"],
   "exclude": ["node_modules", "build"]
 }

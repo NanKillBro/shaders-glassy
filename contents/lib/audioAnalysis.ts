@@ -1,7 +1,7 @@
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
 import { isAudioResult, postAudioMessage } from "./audioBridge";
 
-// The Web Audio graph lives in contents/audio-main-world.ts; this drives it and
+// The Web Audio graph lives in contents/lib/audioGraph.ts; this drives it and
 // keeps the element listeners, which need no AudioContext and so stay here.
 
 interface FacadeState {
@@ -13,6 +13,7 @@ interface FacadeState {
   onBeatDetected: ((multipliers: DynamicMultipliers) => void) | null;
   elementPollId: number | null;
   pendingStart: { settings: GradientSettings } | null;
+  pendingInitialize: { showLogs: boolean } | null;
 }
 
 const state: FacadeState = {
@@ -24,6 +25,7 @@ const state: FacadeState = {
   onBeatDetected: null,
   elementPollId: null,
   pendingStart: null,
+  pendingInitialize: null,
 };
 
 const ELEMENT_POLL_MS = 1000;
@@ -34,6 +36,10 @@ const reusableMultipliers: DynamicMultipliers = {
 };
 
 const currentElement = (): HTMLMediaElement | null => document.querySelector("audio, video");
+
+const postInitialize = (showLogs: boolean): void => {
+  postAudioMessage({ type: "bls-audio-initialize", showLogs });
+};
 
 const postStart = (settings: GradientSettings): void => {
   postAudioMessage({
@@ -90,8 +96,17 @@ window.addEventListener("message", event => {
   const data: unknown = event.data;
   if (!isAudioResult(data)) return;
 
+  // The graph announces itself on load because these two scripts race: whichever
+  // loses would otherwise post into a window nobody is listening on yet, and a
+  // dropped initialize leaves the effects unreactive until a reload.
+  if (data.type === "bls-audio-ready") {
+    if (state.pendingInitialize) postInitialize(state.pendingInitialize.showLogs);
+    return;
+  }
+
   if (data.type === "bls-audio-initialized") {
     state.isInitialized = true;
+    state.pendingInitialize = null;
     // The graph is claimed a round trip after the caller asked, so a start
     // issued against the old synchronous flag would otherwise be dropped.
     if (state.pendingStart) postStart(state.pendingStart.settings);
@@ -105,7 +120,8 @@ window.addEventListener("message", event => {
 
 export const initializeAudioAnalysis = async (showLogs = true): Promise<void> => {
   trackElement();
-  postAudioMessage({ type: "bls-audio-initialize", showLogs });
+  state.pendingInitialize = { showLogs };
+  postInitialize(showLogs);
 };
 
 export const startAudioAnalysis = (
