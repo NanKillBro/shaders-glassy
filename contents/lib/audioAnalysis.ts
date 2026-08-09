@@ -131,6 +131,7 @@ export const startAudioAnalysis = (
 
 export const stopAudioAnalysis = (): void => {
   state.pendingStart = null;
+  state.onBeatDetected = null;
   postAudioMessage({ type: "bls-audio-stop" });
 };
 

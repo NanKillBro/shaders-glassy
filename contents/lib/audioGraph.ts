@@ -216,10 +216,6 @@ const stopAnalysis = (): void => {
     cancelAnimationFrame(state.rafId);
     state.rafId = null;
   }
-  if (state.initTimeoutId !== null) {
-    clearTimeout(state.initTimeoutId);
-    state.initTimeoutId = null;
-  }
   state.lastAnalysisTime = 0;
 };
 
@@ -229,9 +225,7 @@ const reconnect = (): void => {
   const element = currentElement();
   if (!element) return;
 
-  const elementChanged = element !== state.element;
-  const boundElementDetached = state.element !== null && !document.contains(state.element);
-  if (!elementChanged && !boundElementDetached) return;
+  if (element === state.element) return;
 
   logger.log("Audio element changed, reconnecting...");
   if (!bindTo(element)) {
