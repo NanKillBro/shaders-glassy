@@ -1,46 +1,61 @@
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
-import { logger } from "@/shared/utils/logger";
+import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
+import { type AnalysisSettings, audioResultFrom, clampBeatMultipliers, postAudioMessage } from "./audioBridge";
 
-interface AudioAnalysisState {
-  context: AudioContext | null;
-  analyser: AnalyserNode | null;
-  source: MediaElementAudioSourceNode | null;
+interface FacadeState {
   element: HTMLMediaElement | null;
-  rafId: number | null;
   isInitialized: boolean;
-  dataArray: Uint8Array<ArrayBuffer> | null;
-  lastAnalysisTime: number;
-  initTimeoutId: number | null;
-  resumeContextHandler: (() => Promise<void>) | null;
   playHandler: (() => void) | null;
   pauseHandler: (() => void) | null;
   onPlaybackStateChange: ((isPlaying: boolean) => void) | null;
+  onBeatDetected: ((multipliers: DynamicMultipliers) => void) | null;
+  elementPollId: number | null;
+  pendingStart: { settings: GradientSettings } | null;
+  pendingInitialize: boolean;
+  authorizedSettings: AnalysisSettings | null;
+  showLogs: boolean;
 }
 
-const connectedElements = new WeakSet<HTMLMediaElement>();
-
-const state: AudioAnalysisState = {
-  context: null,
-  analyser: null,
-  source: null,
+const state: FacadeState = {
   element: null,
-  rafId: null,
   isInitialized: false,
-  dataArray: null,
-  lastAnalysisTime: 0,
-  initTimeoutId: null,
-  resumeContextHandler: null,
   playHandler: null,
   pauseHandler: null,
   onPlaybackStateChange: null,
+  onBeatDetected: null,
+  elementPollId: null,
+  pendingStart: null,
+  pendingInitialize: false,
+  authorizedSettings: null,
+  showLogs: false,
 };
 
-const ANALYSIS_INTERVAL = 100;
-const MIN_VOLUME_FOR_ANALYSIS = 0.005;
+const ELEMENT_POLL_MS = 1000;
 
 const reusableMultipliers: DynamicMultipliers = {
   speedMultiplier: 1,
   scaleMultiplier: 1,
+};
+
+const currentElement = (): HTMLMediaElement | null => document.querySelector(PLAYER_MEDIA_SELECTOR);
+
+const postLogging = (showLogs: boolean): void => {
+  postAudioMessage({ type: "bls-audio-set-logging", showLogs });
+};
+
+const postInitialize = (): void => {
+  postAudioMessage({ type: "bls-audio-initialize" });
+};
+
+const postStart = (settings: GradientSettings): void => {
+  const analysisSettings: AnalysisSettings = {
+    audioResponsive: settings.audioResponsive,
+    audioBeatThreshold: settings.audioBeatThreshold,
+    audioSpeedMultiplier: settings.audioSpeedMultiplier,
+    kawarpAudioScaleBoost: settings.kawarpAudioScaleBoost,
+  };
+  state.authorizedSettings = analysisSettings;
+  postAudioMessage({ type: "bls-audio-start", settings: analysisSettings });
 };
 
 const removeElementListeners = (element: HTMLMediaElement): void => {
@@ -54,195 +69,92 @@ const removeElementListeners = (element: HTMLMediaElement): void => {
 
 const addElementListeners = (element: HTMLMediaElement): void => {
   state.playHandler = () => {
-    if (state.onPlaybackStateChange) {
-      state.onPlaybackStateChange(true);
-    }
+    state.onPlaybackStateChange?.(true);
   };
   state.pauseHandler = () => {
-    if (state.onPlaybackStateChange) {
-      state.onPlaybackStateChange(false);
-    }
+    state.onPlaybackStateChange?.(false);
   };
   element.addEventListener("play", state.playHandler);
   element.addEventListener("pause", state.pauseHandler);
 };
 
-export const initializeAudioAnalysis = async (): Promise<void> => {
-  if (state.isInitialized) {
-    return;
-  }
-
-  try {
-    state.element = document.querySelector("audio, video") as HTMLMediaElement;
-    if (!state.element) {
-      state.initTimeoutId = window.setTimeout(initializeAudioAnalysis, 1000);
-      return;
-    }
-    state.initTimeoutId = null;
-
-    state.context = new (window.AudioContext || (window as any).webkitAudioContext)();
-
-    if (state.context.state === "suspended") {
-      if (state.resumeContextHandler) {
-        document.removeEventListener("click", state.resumeContextHandler);
-        document.removeEventListener("keydown", state.resumeContextHandler);
-      }
-
-      state.resumeContextHandler = async () => {
-        if (state.context && state.context.state === "suspended") {
-          await state.context.resume();
-        }
-        if (state.resumeContextHandler) {
-          document.removeEventListener("click", state.resumeContextHandler);
-          document.removeEventListener("keydown", state.resumeContextHandler);
-          state.resumeContextHandler = null;
-        }
-      };
-
-      document.addEventListener("click", state.resumeContextHandler);
-      document.addEventListener("keydown", state.resumeContextHandler);
-    }
-
-    state.analyser = state.context.createAnalyser();
-    state.analyser.fftSize = 1024;
-    state.analyser.smoothingTimeConstant = 0.8;
-
-    const bufferLength = state.analyser.frequencyBinCount;
-    state.dataArray = new Uint8Array(new ArrayBuffer(bufferLength));
-
-    state.source = state.context.createMediaElementSource(state.element);
-    state.source.connect(state.analyser);
-    state.source.connect(state.context.destination);
-
-    connectedElements.add(state.element);
-
-    addElementListeners(state.element);
-
-    state.isInitialized = true;
-    logger.log("Audio analysis initialized (passthrough mode)");
-  } catch (error) {
-    logger.error("Error initializing audio analysis:", error);
-  }
+const bindListenersTo = (element: HTMLMediaElement): void => {
+  if (element === state.element) return;
+  if (state.element) removeElementListeners(state.element);
+  state.element = element;
+  addElementListeners(element);
 };
 
-const analyzeAudioFrame = (
-  settings: GradientSettings,
-  onBeatDetected: (multipliers: DynamicMultipliers) => void,
-  timestamp: number
-): void => {
-  if (!state.analyser || !state.dataArray || !state.element) {
-    state.rafId = null;
-    return;
-  }
+const trackElement = (): void => {
+  const element = currentElement();
+  if (element) bindListenersTo(element);
+  if (state.elementPollId !== null || state.element) return;
+  state.elementPollId = window.setTimeout(() => {
+    state.elementPollId = null;
+    trackElement();
+  }, ELEMENT_POLL_MS);
+};
 
-  if (timestamp - state.lastAnalysisTime >= ANALYSIS_INTERVAL) {
-    state.analyser.getByteTimeDomainData(state.dataArray);
+window.addEventListener("message", event => {
+  const message = audioResultFrom(event);
+  if (!message) return;
 
-    const currentVolume = state.element.volume;
-    const volumeMultiplier = currentVolume > MIN_VOLUME_FOR_ANALYSIS ? 1 / currentVolume : 1;
-
-    let peak = 0;
-    const length = state.dataArray.length;
-    const threshold = settings.audioBeatThreshold;
-
-    for (let i = 0; i < length; i++) {
-      const rawAmplitude = Math.abs(state.dataArray[i] - 128) / 128;
-      const amplitude = rawAmplitude * volumeMultiplier;
-      if (amplitude > peak) {
-        peak = amplitude;
-        if (peak > threshold) break;
-      }
+  switch (message.type) {
+    case "bls-audio-ready":
+      postLogging(state.showLogs);
+      if (state.pendingInitialize) postInitialize();
+      break;
+    case "bls-audio-initialized": {
+      state.isInitialized = true;
+      state.pendingInitialize = false;
+      const pendingStart = state.pendingStart;
+      state.pendingStart = null;
+      if (pendingStart) postStart(pendingStart.settings);
+      break;
     }
-
-    const isBeat = peak > threshold;
-
-    const scaleBoost = settings.kawarpAudioScaleBoost;
-
-    reusableMultipliers.speedMultiplier = settings.audioResponsive && isBeat ? settings.audioSpeedMultiplier : 1;
-    reusableMultipliers.scaleMultiplier = settings.audioResponsive && isBeat ? 1 + scaleBoost / 100 : 1;
-
-    onBeatDetected(reusableMultipliers);
-
-    state.lastAnalysisTime = timestamp;
+    case "bls-audio-beat": {
+      const bounded = clampBeatMultipliers(message, state.authorizedSettings);
+      reusableMultipliers.speedMultiplier = bounded.speedMultiplier;
+      reusableMultipliers.scaleMultiplier = bounded.scaleMultiplier;
+      state.onBeatDetected?.(reusableMultipliers);
+      break;
+    }
   }
+});
 
-  state.rafId = requestAnimationFrame(ts => analyzeAudioFrame(settings, onBeatDetected, ts));
+export const setAudioLogging = (showLogs: boolean): void => {
+  state.showLogs = showLogs;
+  postLogging(showLogs);
+};
+
+export const initializeAudioAnalysis = async (showLogs: boolean): Promise<void> => {
+  trackElement();
+  setAudioLogging(showLogs);
+  state.pendingInitialize = true;
+  postInitialize();
 };
 
 export const startAudioAnalysis = (
   settings: GradientSettings,
   onBeatDetected: (multipliers: DynamicMultipliers) => void
 ): void => {
-  if (state.rafId !== null) {
-    cancelAnimationFrame(state.rafId);
-  }
-
-  state.lastAnalysisTime = 0;
-  state.rafId = requestAnimationFrame(timestamp => analyzeAudioFrame(settings, onBeatDetected, timestamp));
+  state.onBeatDetected = onBeatDetected;
+  state.pendingStart = { settings };
+  postStart(settings);
 };
 
 export const stopAudioAnalysis = (): void => {
-  if (state.rafId !== null) {
-    cancelAnimationFrame(state.rafId);
-    state.rafId = null;
-  }
-
-  if (state.initTimeoutId !== null) {
-    clearTimeout(state.initTimeoutId);
-    state.initTimeoutId = null;
-  }
-
-  state.lastAnalysisTime = 0;
-};
-
-const reconnectToNewElement = (newElement: HTMLMediaElement): void => {
-  if (!state.context) return;
-
-  if (state.element) {
-    removeElementListeners(state.element);
-  }
-
-  if (connectedElements.has(newElement)) {
-    logger.log("Element already has MediaElementSource, re-adding listeners");
-    state.element = newElement;
-    addElementListeners(newElement);
-    return;
-  }
-
-  state.analyser = state.context.createAnalyser();
-  state.analyser.fftSize = 1024;
-  state.analyser.smoothingTimeConstant = 0.8;
-
-  const bufferLength = state.analyser.frequencyBinCount;
-  state.dataArray = new Uint8Array(new ArrayBuffer(bufferLength));
-
-  state.source = state.context.createMediaElementSource(newElement);
-  state.source.connect(state.analyser);
-  state.source.connect(state.context.destination);
-
-  connectedElements.add(newElement);
-
-  state.element = newElement;
-
-  addElementListeners(newElement);
-
-  logger.log("Audio analysis reconnected to new element");
+  state.pendingStart = null;
+  state.onBeatDetected = null;
+  state.authorizedSettings = null;
+  postAudioMessage({ type: "bls-audio-stop" });
 };
 
 export const checkAndReconnectElement = (): void => {
+  const element = currentElement();
+  if (element) bindListenersTo(element);
   if (!state.isInitialized) return;
-
-  const currentElement = document.querySelector("audio, video") as HTMLMediaElement;
-
-  if (currentElement && currentElement !== state.element) {
-    logger.log("Audio element changed, reconnecting...");
-    reconnectToNewElement(currentElement);
-  } else if (state.element && !document.contains(state.element)) {
-    if (currentElement) {
-      logger.log("Old audio element detached, reconnecting to new one...");
-      reconnectToNewElement(currentElement);
-    }
-  }
+  postAudioMessage({ type: "bls-audio-reconnect" });
 };
 
 export const isAudioInitialized = (): boolean => state.isInitialized;
@@ -252,5 +164,6 @@ export const setPlaybackStateCallback = (callback: ((isPlaying: boolean) => void
 };
 
 export const isPlaying = (): boolean => {
-  return state.element ? !state.element.paused : false;
+  const element = state.element ?? currentElement();
+  return element ? !element.paused : false;
 };

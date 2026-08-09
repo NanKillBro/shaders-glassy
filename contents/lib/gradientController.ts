@@ -37,7 +37,7 @@ const getTargetSelectorFromPageType = (pageType: "player" | "homepage" | "search
 };
 
 const handleBeatDetected = (multipliers: DynamicMultipliers): void => {
-  dynamicMultipliers = multipliers;
+  dynamicMultipliers = { ...multipliers };
   kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
 };
 
@@ -56,12 +56,14 @@ const handlePlaybackStateChange = (isPlaying: boolean): void => {
 };
 
 const handleAudioResponsiveToggle = (): void => {
-  if (gradientSettings.audioResponsive && audioAnalysis.isAudioInitialized()) {
+  if (gradientSettings.audioResponsive) {
     audioAnalysis.startAudioAnalysis(gradientSettings, handleBeatDetected);
-  } else {
-    dynamicMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
-    kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
+    return;
   }
+
+  audioAnalysis.stopAudioAnalysis();
+  dynamicMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
+  kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
 };
 
 const destroyBrowsePageEffects = (): void => {
@@ -166,6 +168,7 @@ export const updateGradientSettings = async (settings: GradientSettings): Promis
   }
 
   logger.setEnabled(settings.showLogs);
+  audioAnalysis.setAudioLogging(settings.showLogs);
 
   if (wasEnabled !== settings.enabled) {
     if (!settings.enabled) {

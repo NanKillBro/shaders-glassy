@@ -1,4 +1,5 @@
 import type { PlasmoCSConfig } from "plasmo";
+import audioGraphBundleUrl from "url:./lib/audioGraph";
 
 export const config: PlasmoCSConfig = {
   matches: ["https://music.youtube.com/*"],
@@ -13,7 +14,17 @@ function injectScript(fileName: string): void {
   (document.head || document.documentElement).appendChild(script);
 }
 
+function extensionRelativeName(pageRelativeBundleUrl: string): string | undefined {
+  return pageRelativeBundleUrl.split("/").pop()?.split("?")[0];
+}
+
+function injectBundle(pageRelativeBundleUrl: string): void {
+  const fileName = extensionRelativeName(pageRelativeBundleUrl);
+  if (fileName) injectScript(fileName);
+}
+
 injectScript("assets/earlyInject.js");
+injectBundle(audioGraphBundleUrl);
 
 window.addEventListener("DOMContentLoaded", () => {
   injectScript("assets/playerScript.js");

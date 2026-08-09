@@ -1,3 +1,4 @@
+import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
 import { checkAndReconnectElement } from "./audioAnalysis";
 
@@ -6,6 +7,7 @@ type NavigationCallback = () => void;
 
 let navigationHandler: (() => void) | null = null;
 let videoPlayHandler: (() => void) | null = null;
+let listenerTarget: HTMLMediaElement | null = null;
 let songImageObserver: MutationObserver | null = null;
 let playerPageObserver: MutationObserver | null = null;
 let videoObserver: MutationObserver | null = null;
@@ -116,7 +118,7 @@ const setupVideoPlayListener = (): void => {
   let lastVideoSrc = "";
 
   videoPlayHandler = () => {
-    const video = document.querySelector("video") as HTMLVideoElement;
+    const video = document.querySelector<HTMLMediaElement>(PLAYER_MEDIA_SELECTOR);
     if (video && video.src && video.src !== lastVideoSrc) {
       lastVideoSrc = video.src;
       logger.log("Video source changed - re-extracting colors");
@@ -130,21 +132,26 @@ const setupVideoPlayListener = (): void => {
     }
   };
 
-  const attachVideoListeners = (video: HTMLVideoElement) => {
+  const attachVideoListeners = (video: HTMLMediaElement) => {
     if (!videoPlayHandler) return;
+    if (listenerTarget && listenerTarget !== video) {
+      listenerTarget.removeEventListener("play", videoPlayHandler);
+      listenerTarget.removeEventListener("loadeddata", videoPlayHandler);
+    }
     video.removeEventListener("play", videoPlayHandler);
     video.removeEventListener("loadeddata", videoPlayHandler);
     video.addEventListener("play", videoPlayHandler);
     video.addEventListener("loadeddata", videoPlayHandler);
+    listenerTarget = video;
   };
 
-  const video = document.querySelector("video") as HTMLVideoElement;
+  const video = document.querySelector<HTMLMediaElement>(PLAYER_MEDIA_SELECTOR);
   if (video) {
     attachVideoListeners(video);
   }
 
   videoObserver = new MutationObserver(() => {
-    const video = document.querySelector("video") as HTMLVideoElement;
+    const video = document.querySelector<HTMLMediaElement>(PLAYER_MEDIA_SELECTOR);
     if (video) {
       attachVideoListeners(video);
     }
@@ -227,10 +234,10 @@ export const cleanup = (): void => {
   }
 
   if (videoPlayHandler) {
-    const video = document.querySelector("video");
-    if (video) {
-      video.removeEventListener("play", videoPlayHandler);
-      video.removeEventListener("loadeddata", videoPlayHandler);
+    if (listenerTarget) {
+      listenerTarget.removeEventListener("play", videoPlayHandler);
+      listenerTarget.removeEventListener("loadeddata", videoPlayHandler);
+      listenerTarget = null;
     }
     videoPlayHandler = null;
   }
