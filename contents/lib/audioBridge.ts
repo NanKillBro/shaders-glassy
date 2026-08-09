@@ -74,6 +74,24 @@ const postAudioMessage = (message: AudioCommand | AudioResult): void => {
   window.postMessage(message, window.location.origin);
 };
 
+interface BeatMultipliers {
+  speedMultiplier: number;
+  scaleMultiplier: number;
+}
+
+const NEUTRAL_BEAT: BeatMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
+
+const clampToAuthorizedRange = (value: number, ceiling: number): number =>
+  Math.min(Math.max(value, 1), Math.max(ceiling, 1));
+
+const clampBeatMultipliers = (beat: BeatMultipliers, settings: AnalysisSettings | null): BeatMultipliers => {
+  if (!settings) return NEUTRAL_BEAT;
+  return {
+    speedMultiplier: clampToAuthorizedRange(beat.speedMultiplier, settings.audioSpeedMultiplier),
+    scaleMultiplier: clampToAuthorizedRange(beat.scaleMultiplier, 1 + settings.kawarpAudioScaleBoost / 100),
+  };
+};
+
 const AUDIO_BUS_KEY = "__blyricsAudio";
 const AUDIO_BUS_VERSION = 1;
 
@@ -133,10 +151,11 @@ const publishSharedAudioBus = (bus: SharedAudioBus): void => {
 
 export {
   AUDIO_BUS_VERSION,
+  clampBeatMultipliers,
   isAudioCommand,
   isAudioResult,
   postAudioMessage,
   publishSharedAudioBus,
   readSharedAudioBus,
 };
-export type { AnalysisSettings, SharedAudioBus };
+export type { AnalysisSettings, BeatMultipliers, SharedAudioBus };

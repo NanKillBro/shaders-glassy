@@ -1,6 +1,6 @@
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
 import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
-import { isAudioResult, postAudioMessage } from "./audioBridge";
+import { type AnalysisSettings, clampBeatMultipliers, isAudioResult, postAudioMessage } from "./audioBridge";
 
 interface FacadeState {
   element: HTMLMediaElement | null;
@@ -12,6 +12,7 @@ interface FacadeState {
   elementPollId: number | null;
   pendingStart: { settings: GradientSettings } | null;
   pendingInitialize: boolean;
+  authorizedSettings: AnalysisSettings | null;
   showLogs: boolean;
 }
 
@@ -25,6 +26,7 @@ const state: FacadeState = {
   elementPollId: null,
   pendingStart: null,
   pendingInitialize: false,
+  authorizedSettings: null,
   showLogs: false,
 };
 
@@ -46,15 +48,14 @@ const postInitialize = (): void => {
 };
 
 const postStart = (settings: GradientSettings): void => {
-  postAudioMessage({
-    type: "bls-audio-start",
-    settings: {
-      audioResponsive: settings.audioResponsive,
-      audioBeatThreshold: settings.audioBeatThreshold,
-      audioSpeedMultiplier: settings.audioSpeedMultiplier,
-      kawarpAudioScaleBoost: settings.kawarpAudioScaleBoost,
-    },
-  });
+  const analysisSettings: AnalysisSettings = {
+    audioResponsive: settings.audioResponsive,
+    audioBeatThreshold: settings.audioBeatThreshold,
+    audioSpeedMultiplier: settings.audioSpeedMultiplier,
+    kawarpAudioScaleBoost: settings.kawarpAudioScaleBoost,
+  };
+  state.authorizedSettings = analysisSettings;
+  postAudioMessage({ type: "bls-audio-start", settings: analysisSettings });
 };
 
 const removeElementListeners = (element: HTMLMediaElement): void => {
@@ -112,11 +113,13 @@ window.addEventListener("message", event => {
       if (pendingStart) postStart(pendingStart.settings);
       break;
     }
-    case "bls-audio-beat":
-      reusableMultipliers.speedMultiplier = message.speedMultiplier;
-      reusableMultipliers.scaleMultiplier = message.scaleMultiplier;
+    case "bls-audio-beat": {
+      const bounded = clampBeatMultipliers(message, state.authorizedSettings);
+      reusableMultipliers.speedMultiplier = bounded.speedMultiplier;
+      reusableMultipliers.scaleMultiplier = bounded.scaleMultiplier;
       state.onBeatDetected?.(reusableMultipliers);
       break;
+    }
   }
 });
 
@@ -144,13 +147,14 @@ export const startAudioAnalysis = (
 export const stopAudioAnalysis = (): void => {
   state.pendingStart = null;
   state.onBeatDetected = null;
+  state.authorizedSettings = null;
   postAudioMessage({ type: "bls-audio-stop" });
 };
 
 export const checkAndReconnectElement = (): void => {
-  if (!state.isInitialized) return;
   const element = currentElement();
   if (element) bindListenersTo(element);
+  if (!state.isInitialized) return;
   postAudioMessage({ type: "bls-audio-reconnect" });
 };
 

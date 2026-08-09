@@ -83,7 +83,11 @@ const buildAnalyser = (context: AudioContext, source: MediaElementAudioSourceNod
   source.connect(analyser);
 
   if (state.source && state.analyser) {
-    state.source.disconnect(state.analyser);
+    try {
+      state.source.disconnect(state.analyser);
+    } catch (error) {
+      logger.log("Previous analyser edge was already removed:", error);
+    }
   }
 
   state.analyser = analyser;
@@ -230,10 +234,6 @@ const stopAnalysis = (): void => {
   if (state.rafId !== null) {
     cancelAnimationFrame(state.rafId);
     state.rafId = null;
-  }
-  if (state.initTimeoutId !== null) {
-    clearTimeout(state.initTimeoutId);
-    state.initTimeoutId = null;
   }
   state.lastAnalysisTime = 0;
 };

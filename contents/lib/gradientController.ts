@@ -37,7 +37,7 @@ const getTargetSelectorFromPageType = (pageType: "player" | "homepage" | "search
 };
 
 const handleBeatDetected = (multipliers: DynamicMultipliers): void => {
-  dynamicMultipliers = multipliers;
+  dynamicMultipliers = { ...multipliers };
   kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
 };
 
