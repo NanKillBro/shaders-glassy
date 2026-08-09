@@ -44,7 +44,12 @@ const state: GraphState = {
   lastAnalysisTime: 0,
 };
 
-const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode | null>();
+interface ElementCapture {
+  context: AudioContext;
+  source: MediaElementAudioSourceNode;
+}
+
+const elementCaptures = new WeakMap<HTMLMediaElement, ElementCapture | null>();
 
 const currentElement = (): HTMLMediaElement | null => document.querySelector(PLAYER_MEDIA_SELECTOR);
 
@@ -89,17 +94,18 @@ const ownContext = (): AudioContext => {
   return state.context;
 };
 
-const sourceFor = (context: AudioContext, element: HTMLMediaElement): MediaElementAudioSourceNode | null => {
-  const cached = elementSources.get(element);
+const captureFor = (preferredContext: AudioContext, element: HTMLMediaElement): ElementCapture | null => {
+  const cached = elementCaptures.get(element);
   if (cached !== undefined) return cached;
 
   try {
-    const source = context.createMediaElementSource(element);
-    source.connect(context.destination);
-    elementSources.set(element, source);
-    return source;
+    const source = preferredContext.createMediaElementSource(element);
+    source.connect(preferredContext.destination);
+    const capture: ElementCapture = { context: preferredContext, source };
+    elementCaptures.set(element, capture);
+    return capture;
   } catch (error) {
-    elementSources.set(element, null);
+    elementCaptures.set(element, null);
     logger.error("Could not capture the audio element, effects will not react to sound:", error);
     return null;
   }
@@ -108,18 +114,23 @@ const sourceFor = (context: AudioContext, element: HTMLMediaElement): MediaEleme
 const acquireBus = (element: HTMLMediaElement): SharedAudioBus | null => {
   const shared = readSharedAudioBus();
   if (shared && shared.element === element) {
+    elementCaptures.set(element, { context: shared.context, source: shared.source });
     attachResumeOnGesture(shared.context);
     logger.log("Audio analysis attached to an existing shared bus");
     return shared;
   }
 
-  const context = shared?.context ?? ownContext();
-  attachResumeOnGesture(context);
+  const capture = captureFor(shared?.context ?? ownContext(), element);
+  if (!capture) return null;
 
-  const source = sourceFor(context, element);
-  if (!source) return null;
+  attachResumeOnGesture(capture.context);
 
-  const bus: SharedAudioBus = { version: AUDIO_BUS_VERSION, context, source, element };
+  const bus: SharedAudioBus = {
+    version: AUDIO_BUS_VERSION,
+    context: capture.context,
+    source: capture.source,
+    element,
+  };
   publishSharedAudioBus(bus);
   return bus;
 };

@@ -1,3 +1,5 @@
+import { logger } from "@/shared/utils/logger";
+
 interface AnalysisSettings {
   audioResponsive: boolean;
   audioBeatThreshold: number;
@@ -73,6 +75,12 @@ const postAudioMessage = (message: AudioCommand | AudioResult): void => {
 const AUDIO_BUS_KEY = "__blyricsAudio";
 const AUDIO_BUS_VERSION = 1;
 
+const AUDIO_BUS_CONTRACT =
+  `window.${AUDIO_BUS_KEY} must be { version, context, source, element } where source.context === context ` +
+  "and source.mediaElement === element. Adopt the context already published on the bus rather than creating " +
+  "a second AudioContext: a media element only ever gets one MediaElementAudioSourceNode, and audio nodes " +
+  "cannot be connected across contexts.";
+
 interface SharedAudioBus {
   version: number;
   context: AudioContext;
@@ -82,19 +90,40 @@ interface SharedAudioBus {
 
 const isSharedAudioBus = (value: unknown): value is SharedAudioBus => {
   if (typeof value !== "object" || value === null) return false;
-  const bus = value as Record<string, unknown>;
+  const { version, context, source, element } = value as Partial<SharedAudioBus>;
   return (
-    typeof bus.version === "number" &&
-    bus.context instanceof AudioContext &&
-    bus.source instanceof MediaElementAudioSourceNode &&
-    bus.element instanceof HTMLMediaElement
+    typeof version === "number" &&
+    context instanceof AudioContext &&
+    source instanceof MediaElementAudioSourceNode &&
+    element instanceof HTMLMediaElement &&
+    source.context === context &&
+    source.mediaElement === element
   );
+};
+
+let hasReportedUnusableBus = false;
+
+const reportUnusableBus = (reason: string): void => {
+  if (hasReportedUnusableBus) return;
+  hasReportedUnusableBus = true;
+  logger.error(`Ignoring a shared audio bus that cannot be adopted (${reason}). ${AUDIO_BUS_CONTRACT}`);
 };
 
 const readSharedAudioBus = (): SharedAudioBus | null => {
   const existing = (window as unknown as Record<string, unknown>)[AUDIO_BUS_KEY];
-  if (!isSharedAudioBus(existing)) return null;
-  return existing.version === AUDIO_BUS_VERSION ? existing : null;
+  if (existing === undefined || existing === null) return null;
+
+  if (!isSharedAudioBus(existing)) {
+    reportUnusableBus("malformed, or its source does not belong to its context and element");
+    return null;
+  }
+
+  if (existing.version !== AUDIO_BUS_VERSION) {
+    reportUnusableBus(`version ${existing.version}, this build speaks version ${AUDIO_BUS_VERSION}`);
+    return null;
+  }
+
+  return existing;
 };
 
 const publishSharedAudioBus = (bus: SharedAudioBus): void => {
