@@ -74,6 +74,21 @@ const postAudioMessage = (message: AudioCommand | AudioResult): void => {
   window.postMessage(message, window.location.origin);
 };
 
+const isSameWindowMessage = (event: MessageEvent): boolean =>
+  event.source === window && event.origin === window.location.origin;
+
+const audioCommandFrom = (event: MessageEvent): AudioCommand | null => {
+  if (!isSameWindowMessage(event)) return null;
+  const message: unknown = event.data;
+  return isAudioCommand(message) ? message : null;
+};
+
+const audioResultFrom = (event: MessageEvent): AudioResult | null => {
+  if (!isSameWindowMessage(event)) return null;
+  const message: unknown = event.data;
+  return isAudioResult(message) ? message : null;
+};
+
 interface BeatMultipliers {
   speedMultiplier: number;
   scaleMultiplier: number;
@@ -96,10 +111,11 @@ const AUDIO_BUS_KEY = "__blyricsAudio";
 const AUDIO_BUS_VERSION = 1;
 
 const AUDIO_BUS_CONTRACT =
-  `window.${AUDIO_BUS_KEY} must be { version, context, source, element } where source.context === context ` +
-  "and source.mediaElement === element. Adopt the context already published on the bus rather than creating " +
-  "a second AudioContext: a media element only ever gets one MediaElementAudioSourceNode, and audio nodes " +
-  "cannot be connected across contexts.";
+  `window.${AUDIO_BUS_KEY} must be { version, context, source, element } where source.context === context, ` +
+  "source.mediaElement === element, and context is not closed. Adopt the published context together with its " +
+  "source when you route that same element: a media element only ever gets one MediaElementAudioSourceNode, " +
+  "and audio nodes cannot be connected across contexts. When you route a different element, build your own " +
+  "context instead of borrowing this one, so no participant's teardown can strand another participant's source.";
 
 interface SharedAudioBus {
   version: number;
@@ -142,6 +158,13 @@ const readSharedAudioBus = (): SharedAudioBus | null => {
     return null;
   }
 
+  // A closed context passes every structural check above and throws nothing when
+  // an analyser is built on it, it just reports silence forever.
+  if (bus.context.state === "closed") {
+    reportUnusableBus("its context is closed, so an analyser built on it would only ever read silence");
+    return null;
+  }
+
   return bus;
 };
 
@@ -150,12 +173,12 @@ const publishSharedAudioBus = (bus: SharedAudioBus): void => {
 };
 
 export {
+  audioCommandFrom,
+  audioResultFrom,
   AUDIO_BUS_VERSION,
   clampBeatMultipliers,
-  isAudioCommand,
-  isAudioResult,
   postAudioMessage,
   publishSharedAudioBus,
   readSharedAudioBus,
 };
-export type { AnalysisSettings, BeatMultipliers, SharedAudioBus };
+export type { AnalysisSettings, SharedAudioBus };

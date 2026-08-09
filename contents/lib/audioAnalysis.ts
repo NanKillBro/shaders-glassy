@@ -1,6 +1,6 @@
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
 import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
-import { type AnalysisSettings, clampBeatMultipliers, isAudioResult, postAudioMessage } from "./audioBridge";
+import { type AnalysisSettings, audioResultFrom, clampBeatMultipliers, postAudioMessage } from "./audioBridge";
 
 interface FacadeState {
   element: HTMLMediaElement | null;
@@ -96,9 +96,8 @@ const trackElement = (): void => {
 };
 
 window.addEventListener("message", event => {
-  if (event.source !== window || event.origin !== window.location.origin) return;
-  const message: unknown = event.data;
-  if (!isAudioResult(message)) return;
+  const message = audioResultFrom(event);
+  if (!message) return;
 
   switch (message.type) {
     case "bls-audio-ready":

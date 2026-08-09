@@ -1,13 +1,13 @@
 import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
 import {
-  type AnalysisSettings,
   AUDIO_BUS_VERSION,
-  isAudioCommand,
+  type AnalysisSettings,
+  type SharedAudioBus,
+  audioCommandFrom,
   postAudioMessage,
   publishSharedAudioBus,
   readSharedAudioBus,
-  type SharedAudioBus,
 } from "./audioBridge";
 
 const ANALYSIS_INTERVAL = 100;
@@ -127,7 +127,10 @@ const acquireBus = (element: HTMLMediaElement): SharedAudioBus | null => {
     return shared;
   }
 
-  const capture = captureFor(shared?.context ?? ownContext(), element);
+  // Only the branch above may borrow a published context, because there it also
+  // takes that context's source. Routing a different element into someone else's
+  // context would let their teardown strand this element for the page's lifetime.
+  const capture = captureFor(ownContext(), element);
   if (!capture) return null;
 
   attachResumeOnGesture(capture.context);
@@ -153,6 +156,10 @@ const bindTo = (element: HTMLMediaElement): boolean => {
   return true;
 };
 
+const scheduleInitRetry = (): void => {
+  state.initTimeoutId = window.setTimeout(initialize, INIT_RETRY_MS);
+};
+
 const initialize = (): void => {
   if (state.isInitialized) return;
 
@@ -164,12 +171,12 @@ const initialize = (): void => {
   try {
     const element = currentElement();
     if (!element) {
-      state.initTimeoutId = window.setTimeout(initialize, INIT_RETRY_MS);
+      scheduleInitRetry();
       return;
     }
 
     if (!bindTo(element)) {
-      state.initTimeoutId = window.setTimeout(initialize, INIT_RETRY_MS);
+      scheduleInitRetry();
       return;
     }
 
@@ -178,6 +185,7 @@ const initialize = (): void => {
     logger.log("Audio analysis initialized (passthrough mode)");
   } catch (error) {
     logger.error("Error initializing audio analysis:", error);
+    scheduleInitRetry();
   }
 };
 
@@ -253,9 +261,8 @@ const reconnect = (): void => {
 };
 
 window.addEventListener("message", event => {
-  if (event.source !== window || event.origin !== window.location.origin) return;
-  const message: unknown = event.data;
-  if (!isAudioCommand(message)) return;
+  const message = audioCommandFrom(event);
+  if (!message) return;
 
   try {
     switch (message.type) {
