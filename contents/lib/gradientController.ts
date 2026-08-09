@@ -56,12 +56,14 @@ const handlePlaybackStateChange = (isPlaying: boolean): void => {
 };
 
 const handleAudioResponsiveToggle = (): void => {
-  if (gradientSettings.audioResponsive && audioAnalysis.isAudioInitialized()) {
+  if (gradientSettings.audioResponsive) {
     audioAnalysis.startAudioAnalysis(gradientSettings, handleBeatDetected);
-  } else {
-    dynamicMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
-    kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
+    return;
   }
+
+  audioAnalysis.stopAudioAnalysis();
+  dynamicMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
+  kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
 };
 
 const destroyBrowsePageEffects = (): void => {

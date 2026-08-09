@@ -1,4 +1,5 @@
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
+import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
 import { isAudioResult, postAudioMessage } from "./audioBridge";
 
 interface FacadeState {
@@ -32,7 +33,7 @@ const reusableMultipliers: DynamicMultipliers = {
   scaleMultiplier: 1,
 };
 
-const currentElement = (): HTMLMediaElement | null => document.querySelector("audio, video");
+const currentElement = (): HTMLMediaElement | null => document.querySelector(PLAYER_MEDIA_SELECTOR);
 
 const postInitialize = (showLogs: boolean): void => {
   postAudioMessage({ type: "bls-audio-initialize", showLogs });
@@ -90,24 +91,27 @@ const trackElement = (): void => {
 
 window.addEventListener("message", event => {
   if (event.source !== window || event.origin !== window.location.origin) return;
-  const data: unknown = event.data;
-  if (!isAudioResult(data)) return;
+  const message: unknown = event.data;
+  if (!isAudioResult(message)) return;
 
-  if (data.type === "bls-audio-ready") {
-    if (state.pendingInitialize) postInitialize(state.pendingInitialize.showLogs);
-    return;
+  switch (message.type) {
+    case "bls-audio-ready":
+      if (state.pendingInitialize) postInitialize(state.pendingInitialize.showLogs);
+      break;
+    case "bls-audio-initialized": {
+      state.isInitialized = true;
+      state.pendingInitialize = null;
+      const pendingStart = state.pendingStart;
+      state.pendingStart = null;
+      if (pendingStart) postStart(pendingStart.settings);
+      break;
+    }
+    case "bls-audio-beat":
+      reusableMultipliers.speedMultiplier = message.speedMultiplier;
+      reusableMultipliers.scaleMultiplier = message.scaleMultiplier;
+      state.onBeatDetected?.(reusableMultipliers);
+      break;
   }
-
-  if (data.type === "bls-audio-initialized") {
-    state.isInitialized = true;
-    state.pendingInitialize = null;
-    if (state.pendingStart) postStart(state.pendingStart.settings);
-    return;
-  }
-
-  reusableMultipliers.speedMultiplier = data.speedMultiplier;
-  reusableMultipliers.scaleMultiplier = data.scaleMultiplier;
-  state.onBeatDetected?.(reusableMultipliers);
 });
 
 export const initializeAudioAnalysis = async (showLogs = true): Promise<void> => {

@@ -1,6 +1,8 @@
+import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
 import {
   type AnalysisSettings,
+  AUDIO_BUS_VERSION,
   isAudioCommand,
   postAudioMessage,
   publishSharedAudioBus,
@@ -42,27 +44,27 @@ const state: GraphState = {
   lastAnalysisTime: 0,
 };
 
-const claimedElements = new WeakSet<HTMLMediaElement>();
+const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode | null>();
 
-const currentElement = (): HTMLMediaElement | null => document.querySelector("audio, video");
+const currentElement = (): HTMLMediaElement | null => document.querySelector(PLAYER_MEDIA_SELECTOR);
+
+const detachResumeOnGesture = (): void => {
+  if (!state.resumeContextHandler) return;
+  document.removeEventListener("click", state.resumeContextHandler);
+  document.removeEventListener("keydown", state.resumeContextHandler);
+  state.resumeContextHandler = null;
+};
 
 const attachResumeOnGesture = (context: AudioContext): void => {
   if (context.state !== "suspended") return;
 
-  if (state.resumeContextHandler) {
-    document.removeEventListener("click", state.resumeContextHandler);
-    document.removeEventListener("keydown", state.resumeContextHandler);
-  }
+  detachResumeOnGesture();
 
   state.resumeContextHandler = async () => {
-    if (state.context && state.context.state === "suspended") {
-      await state.context.resume();
+    if (context.state === "suspended") {
+      await context.resume();
     }
-    if (state.resumeContextHandler) {
-      document.removeEventListener("click", state.resumeContextHandler);
-      document.removeEventListener("keydown", state.resumeContextHandler);
-      state.resumeContextHandler = null;
-    }
+    detachResumeOnGesture();
   };
 
   document.addEventListener("click", state.resumeContextHandler);
@@ -70,7 +72,9 @@ const attachResumeOnGesture = (context: AudioContext): void => {
 };
 
 const buildAnalyser = (context: AudioContext, source: MediaElementAudioSourceNode): void => {
-  state.analyser?.disconnect();
+  if (state.source && state.analyser) {
+    state.source.disconnect(state.analyser);
+  }
   state.analyser = context.createAnalyser();
   state.analyser.fftSize = ANALYSER_FFT_SIZE;
   state.analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
@@ -78,35 +82,44 @@ const buildAnalyser = (context: AudioContext, source: MediaElementAudioSourceNod
   source.connect(state.analyser);
 };
 
+const ownContext = (): AudioContext => {
+  if (!state.context) {
+    state.context = new AudioContext();
+  }
+  return state.context;
+};
+
+const sourceFor = (context: AudioContext, element: HTMLMediaElement): MediaElementAudioSourceNode | null => {
+  const cached = elementSources.get(element);
+  if (cached !== undefined) return cached;
+
+  try {
+    const source = context.createMediaElementSource(element);
+    source.connect(context.destination);
+    elementSources.set(element, source);
+    return source;
+  } catch (error) {
+    elementSources.set(element, null);
+    logger.error("Could not capture the audio element, effects will not react to sound:", error);
+    return null;
+  }
+};
+
 const acquireBus = (element: HTMLMediaElement): SharedAudioBus | null => {
   const shared = readSharedAudioBus();
   if (shared && shared.element === element) {
+    attachResumeOnGesture(shared.context);
     logger.log("Audio analysis attached to an existing shared bus");
     return shared;
   }
 
-  if (claimedElements.has(element)) {
-    logger.error("This element was already claimed and can never be routed again. Reload the page.");
-    return null;
-  }
-
-  const context = new AudioContext();
+  const context = shared?.context ?? ownContext();
   attachResumeOnGesture(context);
 
-  let source: MediaElementAudioSourceNode;
-  try {
-    source = context.createMediaElementSource(element);
-  } catch (error) {
-    claimedElements.add(element);
-    logger.error("Could not capture the audio element, effects will not react to sound:", error);
-    void context.close();
-    return null;
-  }
-  claimedElements.add(element);
+  const source = sourceFor(context, element);
+  if (!source) return null;
 
-  source.connect(context.destination);
-
-  const bus: SharedAudioBus = { version: 1, context, source, element };
+  const bus: SharedAudioBus = { version: AUDIO_BUS_VERSION, context, source, element };
   publishSharedAudioBus(bus);
   return bus;
 };
@@ -115,10 +128,10 @@ const bindTo = (element: HTMLMediaElement): boolean => {
   const bus = acquireBus(element);
   if (!bus) return false;
 
+  buildAnalyser(bus.context, bus.source);
   state.context = bus.context;
   state.source = bus.source;
   state.element = element;
-  buildAnalyser(bus.context, bus.source);
   return true;
 };
 
@@ -137,7 +150,10 @@ const initialize = (): void => {
       return;
     }
 
-    if (!bindTo(element)) return;
+    if (!bindTo(element)) {
+      state.initTimeoutId = window.setTimeout(initialize, INIT_RETRY_MS);
+      return;
+    }
 
     state.isInitialized = true;
     postAudioMessage({ type: "bls-audio-initialized" });
@@ -218,22 +234,24 @@ const reconnect = (): void => {
   if (!elementChanged && !boundElementDetached) return;
 
   logger.log("Audio element changed, reconnecting...");
-  bindTo(element);
+  if (!bindTo(element)) {
+    logger.error("Could not rebind audio analysis to the current media element");
+  }
 };
 
 window.addEventListener("message", event => {
   if (event.source !== window || event.origin !== window.location.origin) return;
-  const data: unknown = event.data;
-  if (!isAudioCommand(data)) return;
+  const message: unknown = event.data;
+  if (!isAudioCommand(message)) return;
 
-  switch (data.type) {
+  switch (message.type) {
     case "bls-audio-initialize":
-      logger.setEnabled(data.showLogs);
+      logger.setEnabled(message.showLogs);
       initialize();
       break;
     case "bls-audio-start":
-      logger.setEnabled(data.showLogs);
-      startAnalysis(data.settings);
+      logger.setEnabled(message.showLogs);
+      startAnalysis(message.settings);
       break;
     case "bls-audio-stop":
       stopAnalysis();

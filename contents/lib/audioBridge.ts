@@ -16,29 +16,54 @@ type AudioResult =
   | { type: "bls-audio-initialized" }
   | { type: "bls-audio-beat"; speedMultiplier: number; scaleMultiplier: number };
 
-const AUDIO_COMMAND_TYPES: readonly string[] = [
-  "bls-audio-initialize",
-  "bls-audio-start",
-  "bls-audio-stop",
-  "bls-audio-reconnect",
-];
-
-const AUDIO_RESULT_TYPES: readonly string[] = ["bls-audio-ready", "bls-audio-initialized", "bls-audio-beat"];
-
-const messageType = (data: unknown): string | null => {
-  if (typeof data !== "object" || data === null) return null;
-  const type = (data as { type?: unknown }).type;
-  return typeof type === "string" ? type : null;
+const messageFields = (message: unknown): Record<string, unknown> | null => {
+  if (typeof message !== "object" || message === null) return null;
+  return typeof (message as { type?: unknown }).type === "string" ? (message as Record<string, unknown>) : null;
 };
 
-const isAudioCommand = (data: unknown): data is AudioCommand => {
-  const type = messageType(data);
-  return type !== null && AUDIO_COMMAND_TYPES.includes(type);
+const isFiniteNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+const isAnalysisSettings = (value: unknown): value is AnalysisSettings => {
+  if (typeof value !== "object" || value === null) return false;
+  const settings = value as Record<string, unknown>;
+  return (
+    typeof settings.audioResponsive === "boolean" &&
+    isFiniteNumber(settings.audioBeatThreshold) &&
+    isFiniteNumber(settings.audioSpeedMultiplier) &&
+    isFiniteNumber(settings.kawarpAudioScaleBoost)
+  );
 };
 
-const isAudioResult = (data: unknown): data is AudioResult => {
-  const type = messageType(data);
-  return type !== null && AUDIO_RESULT_TYPES.includes(type);
+const isAudioCommand = (message: unknown): message is AudioCommand => {
+  const fields = messageFields(message);
+  if (!fields) return false;
+
+  switch (fields.type) {
+    case "bls-audio-initialize":
+      return typeof fields.showLogs === "boolean";
+    case "bls-audio-start":
+      return typeof fields.showLogs === "boolean" && isAnalysisSettings(fields.settings);
+    case "bls-audio-stop":
+    case "bls-audio-reconnect":
+      return true;
+    default:
+      return false;
+  }
+};
+
+const isAudioResult = (message: unknown): message is AudioResult => {
+  const fields = messageFields(message);
+  if (!fields) return false;
+
+  switch (fields.type) {
+    case "bls-audio-ready":
+    case "bls-audio-initialized":
+      return true;
+    case "bls-audio-beat":
+      return isFiniteNumber(fields.speedMultiplier) && isFiniteNumber(fields.scaleMultiplier);
+    default:
+      return false;
+  }
 };
 
 const postAudioMessage = (message: AudioCommand | AudioResult): void => {
@@ -76,5 +101,12 @@ const publishSharedAudioBus = (bus: SharedAudioBus): void => {
   (window as unknown as Record<string, unknown>)[AUDIO_BUS_KEY] = bus;
 };
 
-export { isAudioCommand, isAudioResult, postAudioMessage, publishSharedAudioBus, readSharedAudioBus };
+export {
+  AUDIO_BUS_VERSION,
+  isAudioCommand,
+  isAudioResult,
+  postAudioMessage,
+  publishSharedAudioBus,
+  readSharedAudioBus,
+};
 export type { AnalysisSettings, SharedAudioBus };
