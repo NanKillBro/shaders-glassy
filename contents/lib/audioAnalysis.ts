@@ -11,7 +11,8 @@ interface FacadeState {
   onBeatDetected: ((multipliers: DynamicMultipliers) => void) | null;
   elementPollId: number | null;
   pendingStart: { settings: GradientSettings } | null;
-  pendingInitialize: { showLogs: boolean } | null;
+  pendingInitialize: boolean;
+  showLogs: boolean;
 }
 
 const state: FacadeState = {
@@ -23,7 +24,8 @@ const state: FacadeState = {
   onBeatDetected: null,
   elementPollId: null,
   pendingStart: null,
-  pendingInitialize: null,
+  pendingInitialize: false,
+  showLogs: false,
 };
 
 const ELEMENT_POLL_MS = 1000;
@@ -35,14 +37,17 @@ const reusableMultipliers: DynamicMultipliers = {
 
 const currentElement = (): HTMLMediaElement | null => document.querySelector(PLAYER_MEDIA_SELECTOR);
 
-const postInitialize = (showLogs: boolean): void => {
-  postAudioMessage({ type: "bls-audio-initialize", showLogs });
+const postLogging = (showLogs: boolean): void => {
+  postAudioMessage({ type: "bls-audio-set-logging", showLogs });
+};
+
+const postInitialize = (): void => {
+  postAudioMessage({ type: "bls-audio-initialize" });
 };
 
 const postStart = (settings: GradientSettings): void => {
   postAudioMessage({
     type: "bls-audio-start",
-    showLogs: settings.showLogs,
     settings: {
       audioResponsive: settings.audioResponsive,
       audioBeatThreshold: settings.audioBeatThreshold,
@@ -96,11 +101,12 @@ window.addEventListener("message", event => {
 
   switch (message.type) {
     case "bls-audio-ready":
-      if (state.pendingInitialize) postInitialize(state.pendingInitialize.showLogs);
+      postLogging(state.showLogs);
+      if (state.pendingInitialize) postInitialize();
       break;
     case "bls-audio-initialized": {
       state.isInitialized = true;
-      state.pendingInitialize = null;
+      state.pendingInitialize = false;
       const pendingStart = state.pendingStart;
       state.pendingStart = null;
       if (pendingStart) postStart(pendingStart.settings);
@@ -114,10 +120,16 @@ window.addEventListener("message", event => {
   }
 });
 
-export const initializeAudioAnalysis = async (showLogs = true): Promise<void> => {
+export const setAudioLogging = (showLogs: boolean): void => {
+  state.showLogs = showLogs;
+  postLogging(showLogs);
+};
+
+export const initializeAudioAnalysis = async (showLogs: boolean): Promise<void> => {
   trackElement();
-  state.pendingInitialize = { showLogs };
-  postInitialize(showLogs);
+  setAudioLogging(showLogs);
+  state.pendingInitialize = true;
+  postInitialize();
 };
 
 export const startAudioAnalysis = (

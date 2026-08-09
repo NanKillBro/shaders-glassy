@@ -168,6 +168,7 @@ export const updateGradientSettings = async (settings: GradientSettings): Promis
   }
 
   logger.setEnabled(settings.showLogs);
+  audioAnalysis.setAudioLogging(settings.showLogs);
 
   if (wasEnabled !== settings.enabled) {
     if (!settings.enabled) {

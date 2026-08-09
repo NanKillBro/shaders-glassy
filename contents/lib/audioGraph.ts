@@ -77,14 +77,17 @@ const attachResumeOnGesture = (context: AudioContext): void => {
 };
 
 const buildAnalyser = (context: AudioContext, source: MediaElementAudioSourceNode): void => {
+  const analyser = context.createAnalyser();
+  analyser.fftSize = ANALYSER_FFT_SIZE;
+  analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
+  source.connect(analyser);
+
   if (state.source && state.analyser) {
     state.source.disconnect(state.analyser);
   }
-  state.analyser = context.createAnalyser();
-  state.analyser.fftSize = ANALYSER_FFT_SIZE;
-  state.analyser.smoothingTimeConstant = ANALYSER_SMOOTHING;
-  state.dataArray = new Uint8Array(new ArrayBuffer(state.analyser.frequencyBinCount));
-  source.connect(state.analyser);
+
+  state.analyser = analyser;
+  state.dataArray = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
 };
 
 const ownContext = (): AudioContext => {
@@ -217,6 +220,7 @@ const analyzeAudioFrame = (timestamp: number): void => {
 
 const startAnalysis = (settings: AnalysisSettings): void => {
   state.settings = settings;
+  if (!state.isInitialized) initialize();
   if (state.rafId !== null) cancelAnimationFrame(state.rafId);
   state.lastAnalysisTime = 0;
   state.rafId = requestAnimationFrame(analyzeAudioFrame);
@@ -226,6 +230,10 @@ const stopAnalysis = (): void => {
   if (state.rafId !== null) {
     cancelAnimationFrame(state.rafId);
     state.rafId = null;
+  }
+  if (state.initTimeoutId !== null) {
+    clearTimeout(state.initTimeoutId);
+    state.initTimeoutId = null;
   }
   state.lastAnalysisTime = 0;
 };
@@ -249,21 +257,26 @@ window.addEventListener("message", event => {
   const message: unknown = event.data;
   if (!isAudioCommand(message)) return;
 
-  switch (message.type) {
-    case "bls-audio-initialize":
-      logger.setEnabled(message.showLogs);
-      initialize();
-      break;
-    case "bls-audio-start":
-      logger.setEnabled(message.showLogs);
-      startAnalysis(message.settings);
-      break;
-    case "bls-audio-stop":
-      stopAnalysis();
-      break;
-    case "bls-audio-reconnect":
-      reconnect();
-      break;
+  try {
+    switch (message.type) {
+      case "bls-audio-set-logging":
+        logger.setEnabled(message.showLogs);
+        break;
+      case "bls-audio-initialize":
+        initialize();
+        break;
+      case "bls-audio-start":
+        startAnalysis(message.settings);
+        break;
+      case "bls-audio-stop":
+        stopAnalysis();
+        break;
+      case "bls-audio-reconnect":
+        reconnect();
+        break;
+    }
+  } catch (error) {
+    logger.error(`Audio command ${message.type} failed:`, error);
   }
 });
 

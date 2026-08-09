@@ -8,8 +8,9 @@ interface AnalysisSettings {
 }
 
 type AudioCommand =
-  | { type: "bls-audio-initialize"; showLogs: boolean }
-  | { type: "bls-audio-start"; settings: AnalysisSettings; showLogs: boolean }
+  | { type: "bls-audio-set-logging"; showLogs: boolean }
+  | { type: "bls-audio-initialize" }
+  | { type: "bls-audio-start"; settings: AnalysisSettings }
   | { type: "bls-audio-stop" }
   | { type: "bls-audio-reconnect" };
 
@@ -41,10 +42,11 @@ const isAudioCommand = (message: unknown): message is AudioCommand => {
   if (!fields) return false;
 
   switch (fields.type) {
-    case "bls-audio-initialize":
+    case "bls-audio-set-logging":
       return typeof fields.showLogs === "boolean";
     case "bls-audio-start":
-      return typeof fields.showLogs === "boolean" && isAnalysisSettings(fields.settings);
+      return isAnalysisSettings(fields.settings);
+    case "bls-audio-initialize":
     case "bls-audio-stop":
     case "bls-audio-reconnect":
       return true;
@@ -88,17 +90,15 @@ interface SharedAudioBus {
   element: HTMLMediaElement;
 }
 
-const isSharedAudioBus = (value: unknown): value is SharedAudioBus => {
-  if (typeof value !== "object" || value === null) return false;
+const adoptableBus = (value: unknown): SharedAudioBus | null => {
+  if (typeof value !== "object" || value === null) return null;
   const { version, context, source, element } = value as Partial<SharedAudioBus>;
-  return (
-    typeof version === "number" &&
-    context instanceof AudioContext &&
-    source instanceof MediaElementAudioSourceNode &&
-    element instanceof HTMLMediaElement &&
-    source.context === context &&
-    source.mediaElement === element
-  );
+  if (typeof version !== "number") return null;
+  if (!(context instanceof AudioContext)) return null;
+  if (!(source instanceof MediaElementAudioSourceNode)) return null;
+  if (!(element instanceof HTMLMediaElement)) return null;
+  if (source.context !== context || source.mediaElement !== element) return null;
+  return { version, context, source, element };
 };
 
 let hasReportedUnusableBus = false;
@@ -113,17 +113,18 @@ const readSharedAudioBus = (): SharedAudioBus | null => {
   const existing = (window as unknown as Record<string, unknown>)[AUDIO_BUS_KEY];
   if (existing === undefined || existing === null) return null;
 
-  if (!isSharedAudioBus(existing)) {
+  const bus = adoptableBus(existing);
+  if (!bus) {
     reportUnusableBus("malformed, or its source does not belong to its context and element");
     return null;
   }
 
-  if (existing.version !== AUDIO_BUS_VERSION) {
-    reportUnusableBus(`version ${existing.version}, this build speaks version ${AUDIO_BUS_VERSION}`);
+  if (bus.version !== AUDIO_BUS_VERSION) {
+    reportUnusableBus(`version ${bus.version}, this build speaks version ${AUDIO_BUS_VERSION}`);
     return null;
   }
 
-  return existing;
+  return bus;
 };
 
 const publishSharedAudioBus = (bus: SharedAudioBus): void => {
