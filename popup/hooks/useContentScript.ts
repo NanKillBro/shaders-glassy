@@ -6,6 +6,10 @@ interface ContentData {
   songTitle: string;
   songAuthor: string;
   gradientSettings: GradientSettings;
+  /** The exact image handed to kawarp. Never re-derive this from the DOM. */
+  albumArtUrl: string | null;
+  animatedArtUrl: string | null;
+  isAd: boolean;
 }
 
 export const useContentScript = () => {
@@ -13,6 +17,9 @@ export const useContentScript = () => {
     songTitle: "",
     songAuthor: "",
     gradientSettings: {} as GradientSettings,
+    albumArtUrl: null,
+    animatedArtUrl: null,
+    isAd: false,
   });
 
   const sendMessage = useCallback(async (action: string, payload?: Record<string, unknown>) => {
@@ -36,6 +43,9 @@ export const useContentScript = () => {
         songTitle: response.songTitle || "",
         songAuthor: response.songAuthor || "",
         gradientSettings: response.gradientSettings || ({} as GradientSettings),
+        albumArtUrl: response.albumArtUrl ?? null,
+        animatedArtUrl: response.animatedArtUrl ?? null,
+        isAd: response.isAd ?? false,
       });
     }
   }, [sendMessage]);

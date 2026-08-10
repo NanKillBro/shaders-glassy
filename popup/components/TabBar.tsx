@@ -1,23 +1,32 @@
 import React from "react";
-import { TabType } from "@/popup/types";
+import { SETTINGS_TABS, SettingsTab } from "@/popup/types";
 
 interface TabBarProps {
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
+  activeTab: SettingsTab;
+  onTabChange: (tab: SettingsTab) => void;
 }
 
-export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
-  return (
-    <div className="tabs">
-      <button
-        className={`tab ${activeTab === "controls" ? "tab--active" : ""}`}
-        onClick={() => onTabChange("controls")}
-      >
-        Controls
-      </button>
-      <button className={`tab ${activeTab === "about" ? "tab--active" : ""}`} onClick={() => onTabChange("about")}>
-        About
-      </button>
-    </div>
-  );
+const TAB_LABELS: Record<SettingsTab, string> = {
+  general: "General",
+  look: "Look",
+  motion: "Motion",
+  audio: "Audio",
+  extras: "Extras",
 };
+
+export const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => (
+  <div className="tabs" role="tablist">
+    {SETTINGS_TABS.map(tab => (
+      <button
+        key={tab}
+        type="button"
+        className="tab"
+        role="tab"
+        aria-selected={activeTab === tab}
+        onClick={() => onTabChange(tab)}
+      >
+        {TAB_LABELS[tab]}
+      </button>
+    ))}
+  </div>
+);

@@ -1,13 +1,24 @@
 import React from "react";
 import "./popup.css";
 
+import {
+  AboutTab,
+  AudioTab,
+  ExtrasTab,
+  Footer,
+  GeneralTab,
+  Header,
+  LookTab,
+  MotionTab,
+  NowPlaying,
+  TabBar,
+} from "./components";
 import { useContentScript, useGradientSettings, useTabState } from "./hooks";
-import { AboutTab, ControlsTab, Header, TabBar } from "./components";
-import { GradientSettings } from "./types";
+import { GradientSettings, SettingsTab, defaultSettings } from "./types";
 
 const Popup: React.FC = () => {
-  const { activeTab, setActiveTab } = useTabState();
-  const { songTitle, songAuthor, updateGradientSettings } = useContentScript();
+  const { activeTab, selectTab, isAboutOpen, toggleAbout } = useTabState();
+  const { songTitle, songAuthor, albumArtUrl, animatedArtUrl, isAd, updateGradientSettings } = useContentScript();
 
   const {
     gradientSettings,
@@ -18,9 +29,8 @@ const Popup: React.FC = () => {
     importSettings,
   } = useGradientSettings();
 
-  const handleGradientSettingChange = async (key: keyof GradientSettings, value: number) => {
-    const newSettings = updateGradientSetting(key, value);
-    await updateGradientSettings(newSettings);
+  const handleSettingChange = async (key: keyof GradientSettings, value: number) => {
+    await updateGradientSettings(updateGradientSetting(key, value));
   };
 
   const handleToggleChange = async (key: keyof GradientSettings, value: boolean) => {
@@ -29,42 +39,58 @@ const Popup: React.FC = () => {
     await updateGradientSettings(newSettings);
   };
 
-  const handleResetAllGradientSettings = async () => {
-    const newSettings = await resetGradientSettings();
-    await updateGradientSettings(newSettings);
+  const handleSettingReset = async (key: keyof GradientSettings) => {
+    await handleSettingChange(key, defaultSettings[key] as number);
   };
 
-  const handleExportSettings = () => {
-    exportSettings();
+  const handleResetAll = async () => {
+    await updateGradientSettings(await resetGradientSettings());
   };
 
-  const handleImportSettings = async () => {
-    const importedSettings = await importSettings();
-    if (importedSettings) {
-      await updateGradientSettings(importedSettings);
-    }
+  const handleImport = async () => {
+    const imported = await importSettings();
+    if (imported) await updateGradientSettings(imported);
+  };
+
+  const sliderProps = {
+    settings: gradientSettings,
+    onSettingChange: handleSettingChange,
+    onSettingReset: handleSettingReset,
+  };
+
+  const panels: Record<SettingsTab, React.ReactNode> = {
+    general: <GeneralTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
+    look: <LookTab {...sliderProps} />,
+    motion: <MotionTab {...sliderProps} />,
+    audio: <AudioTab {...sliderProps} onToggleChange={handleToggleChange} />,
+    extras: <ExtrasTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
   };
 
   return (
-    <div className="popup-container">
-      <Header songTitle={songTitle} songAuthor={songAuthor} />
+    <div className="popup">
+      <Header />
 
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+      <NowPlaying
+        songTitle={songTitle}
+        songAuthor={songAuthor}
+        albumArtUrl={albumArtUrl}
+        animatedArtUrl={animatedArtUrl}
+        isAd={isAd}
+        enabled={gradientSettings.enabled}
+        onEnabledChange={value => handleToggleChange("enabled", value)}
+      />
 
-      <div className="content">
-        {activeTab === "about" && <AboutTab />}
+      {!isAboutOpen && <TabBar activeTab={activeTab} onTabChange={selectTab} />}
 
-        {activeTab === "controls" && (
-          <ControlsTab
-            settings={gradientSettings}
-            onSettingChange={handleGradientSettingChange}
-            onToggleChange={handleToggleChange}
-            onResetAll={handleResetAllGradientSettings}
-            onExport={handleExportSettings}
-            onImport={handleImportSettings}
-          />
-        )}
-      </div>
+      <div className="scroll">{isAboutOpen ? <AboutTab /> : panels[activeTab]}</div>
+
+      <Footer
+        isAboutOpen={isAboutOpen}
+        onAboutToggle={toggleAbout}
+        onImport={handleImport}
+        onExport={exportSettings}
+        onReset={handleResetAll}
+      />
     </div>
   );
 };
