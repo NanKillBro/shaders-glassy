@@ -1,5 +1,6 @@
 import type { PlasmoCSConfig } from "plasmo";
 import { logger } from "@/shared/utils/logger";
+import * as adState from "./lib/adState";
 import * as animatedArtManager from "./lib/animatedArtManager";
 import * as audioAnalysis from "./lib/audioAnalysis";
 import * as gradientController from "./lib/gradientController";
@@ -26,10 +27,14 @@ const initializeApp = async (): Promise<void> => {
     onSettingsUpdate: gradientController.updateGradientSettings,
     getCurrentData: () => {
       const songInfo = messageHandler.getSongInfo();
+      const animatedArt = animatedArtManager.getAnimatedArtState();
       return {
         songTitle: songInfo.title,
         songAuthor: songInfo.author,
         gradientSettings: gradientController.getSettings(),
+        albumArtUrl: kawarpManager.getCurrentImageUrl(),
+        animatedArtUrl: animatedArt.active ? animatedArt.videoUrl : null,
+        isAd: adState.isAdPlaying(),
       };
     },
     getCacheInfo: animatedArtManager.getCacheInfo,

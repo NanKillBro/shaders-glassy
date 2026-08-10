@@ -10,32 +10,31 @@ interface TooltipProps {
 export const Tooltip: React.FC<TooltipProps> = ({ content, children }) => {
   const [visible, setVisible] = useState(false);
 
+  // Top, because a tooltip below the label covers the slider it describes.
+  // flip() only drops it underneath when there is no room above.
   const { refs, floatingStyles } = useFloating({
     open: visible,
-    placement: "left",
-    middleware: [
-      offset(8),
-      flip(),
-      shift({
-        padding: 20,
-      }),
-    ],
+    placement: "top-start",
+    middleware: [offset(6), flip(), shift({ padding: 8 })],
     whileElementsMounted: autoUpdate,
   });
 
   return (
     <>
-      <div
+      <span
         ref={refs.setReference}
         className="tooltip-wrapper"
+        tabIndex={0}
         onMouseEnter={() => setVisible(true)}
         onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
       >
         {children}
-      </div>
+      </span>
       {visible &&
         createPortal(
-          <div ref={refs.setFloating} style={floatingStyles} className="tooltip tooltip--visible">
+          <div ref={refs.setFloating} style={floatingStyles} role="tooltip" className="tooltip">
             {content}
           </div>,
           document.body

@@ -8,6 +8,9 @@ interface MessageHandlers {
     songTitle: string;
     songAuthor: string;
     gradientSettings: GradientSettings;
+    albumArtUrl: string | null;
+    animatedArtUrl: string | null;
+    isAd: boolean;
   };
   getCacheInfo: () => Promise<CacheInfo>;
   getCacheEntries: () => Promise<Record<string, unknown>>;
@@ -61,7 +64,7 @@ export const getSongInfo = (): { title: string; author: string } => {
   const songAuthor = songAuthorElement?.textContent?.split("•")[0] ?? "";
 
   return {
-    title: songTitle,
-    author: songAuthor,
+    title: songTitle.trim(),
+    author: songAuthor.trim(),
   };
 };

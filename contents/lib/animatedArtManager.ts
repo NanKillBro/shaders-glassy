@@ -601,6 +601,19 @@ export async function clearCache(): Promise<{ cleared: number }> {
   }
 }
 
+export interface AnimatedArtState {
+  active: boolean;
+  videoUrl: string | null;
+}
+
+export function getAnimatedArtState(): AnimatedArtState {
+  const video = getVideoElement();
+  if (!video) return { active: false, videoUrl: null };
+
+  const source = video.querySelector("source");
+  return { active: true, videoUrl: source?.src ?? video.currentSrc ?? null };
+}
+
 export function pauseAnimatedArt(): void {
   const video = getVideoElement();
   if (video) {

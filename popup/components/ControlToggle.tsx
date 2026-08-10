@@ -1,59 +1,31 @@
-import React from "react";
-import { Tooltip } from "./Tooltip";
+import React, { useId } from "react";
 
 interface ControlToggleProps {
-  label?: string;
+  label: string;
+  hint?: string;
   value: boolean;
   onChange: (value: boolean) => void;
-  hint?: string;
 }
 
-export const ControlToggle: React.FC<ControlToggleProps> = ({ label, value, onChange, hint }) => {
-  const handleToggle = () => {
-    onChange(!value);
-  };
-
-  const displayLabel = label || (hint ? hint.split(" - ")[0] : "");
-
-  const labelText = (
-    <span
-      style={
-        hint
-          ? {
-              textDecoration: "underline dotted",
-              textUnderlineOffset: "3px",
-              cursor: "help",
-            }
-          : undefined
-      }
-    >
-      {displayLabel}
-    </span>
-  );
+export const ControlToggle: React.FC<ControlToggleProps> = ({ label, hint, value, onChange }) => {
+  const labelId = useId();
 
   return (
-    <div className="control-row">
-      <div className="control-header">
-        <div className="control-label">
-          <div className="control-label__title">
-            <div className="control-label__title-fixed">
-              {hint ? <Tooltip content={hint}>{labelText}</Tooltip> : labelText}
-            </div>
-            <div className="control-label__body">{value ? "ON" : "OFF"}</div>
-          </div>
-        </div>
+    <div className="row">
+      <div className="row__text">
+        <span className="row__label" id={labelId}>
+          {label}
+        </span>
+        {hint && <span className="row__hint">{hint}</span>}
       </div>
-
-      <div className="toggle-container">
-        <button
-          type="button"
-          className={`toggle-button ${value ? "toggle-button--active" : ""}`}
-          onClick={handleToggle}
-          aria-pressed={value}
-        >
-          <div className="toggle-slider" />
-        </button>
-      </div>
+      <button
+        type="button"
+        className="toggle"
+        role="switch"
+        aria-checked={value}
+        aria-labelledby={labelId}
+        onClick={() => onChange(!value)}
+      />
     </div>
   );
 };
