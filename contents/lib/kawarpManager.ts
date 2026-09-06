@@ -5,6 +5,7 @@ import { logger } from "@/shared/utils/logger";
 interface KawarpState {
   backdrop: HTMLDivElement | null;
   container: HTMLDivElement | null;
+  target: HTMLElement | null;
   canvas: HTMLCanvasElement | null;
   instance: Kawarp | null;
   currentImageUrl: string | null;
@@ -27,6 +28,7 @@ interface KawarpState {
 const createEmptyState = (): KawarpState => ({
   backdrop: null,
   container: null,
+  target: null,
   canvas: null,
   instance: null,
   currentImageUrl: null,
@@ -53,6 +55,8 @@ const SCALE_THRESHOLD = 0.001;
 const SPEED_LERP_UP = 0.05;
 const SPEED_LERP_DOWN = 0.03;
 const SPEED_THRESHOLD = 0.001;
+
+export const PIP_LOCATION = "pip";
 
 const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => {
   try {
@@ -264,11 +268,12 @@ export const createKawarp = async (
     return false;
   }
 
-  const state = getKawarpState(location);
+  let state = getKawarpState(location);
 
   if (state.instance) {
     logger.log(`Kawarp already exists for ${location}, destroying first`);
     destroyKawarp(location);
+    state = getKawarpState(location);
   }
 
   creationInProgress.add(location);
@@ -294,6 +299,13 @@ export const createKawarp = async (
     existingKawarp.remove();
   }
 
+  // The layers sit at negative z-index so page content paints above them. That only scopes
+  // correctly when the target establishes a stacking context: #player-page already does via
+  // its own z-index, but the browse and search targets do not, and without this the layers
+  // escape to the root stacking context and render beneath YouTube Music's own page gradient.
+  state.target = targetElement as HTMLElement;
+  state.target.style.isolation = "isolate";
+
   state.container = document.createElement("div");
   state.container.id = `better-lyrics-kawarp-${location}`;
   const isBrowsePage = targetSelector !== "player-page";
@@ -308,7 +320,7 @@ export const createKawarp = async (
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 0;
+      z-index: -2;
       background-color: #000;
       opacity: 0;
       will-change: opacity;
@@ -337,7 +349,7 @@ export const createKawarp = async (
       width: 100vw;
       height: 100vh;
       pointer-events: none;
-      z-index: 0;
+      z-index: -1;
       opacity: 0;
       will-change: opacity, transform;
       transition: opacity 0.5s ease-out;
@@ -472,6 +484,10 @@ export const destroyKawarp = (location?: string): void => {
       state.backdrop.remove();
       state.backdrop = null;
     }
+    if (state.target) {
+      state.target.style.removeProperty("isolation");
+      state.target = null;
+    }
     state.canvas = null;
     state.currentImageUrl = null;
     state.lastSettings = null;
@@ -605,7 +621,7 @@ export const updateKawarpSettings = (
     }
 
     // If container was removed from DOM, clean up state
-    if (!document.contains(state.container)) {
+    if (!state.container.ownerDocument.contains(state.container)) {
       logger.log(`Container for ${loc} was removed from DOM, cleaning up state`);
       destroyKawarp(loc);
       return;
@@ -646,12 +662,14 @@ export const updateKawarpSettings = (
 export const hasKawarp = (location?: string): boolean => {
   if (location) {
     const state = getKawarpState(location);
-    return state.instance !== null && state.container !== null && document.contains(state.container);
+    return (
+      state.instance !== null && state.container !== null && state.container.ownerDocument.contains(state.container)
+    );
   }
   return (
     kawarps.size > 0 &&
     Array.from(kawarps.values()).some(
-      s => s.instance !== null && s.container !== null && document.contains(s.container)
+      s => s.instance !== null && s.container !== null && s.container.ownerDocument.contains(s.container)
     )
   );
 };
@@ -712,4 +730,92 @@ export const resumeKawarp = (location?: string): void => {
       resumeForLocation(loc);
     }
   }
+};
+
+export const createPipKawarp = async (
+  pipWindow: Window,
+  settings: GradientSettings,
+  multipliers: DynamicMultipliers,
+  imageUrl: string | null
+): Promise<boolean> => {
+  if (creationInProgress.has(PIP_LOCATION)) return false;
+
+  let state = getKawarpState(PIP_LOCATION);
+  if (state.instance) {
+    destroyKawarp(PIP_LOCATION);
+    state = getKawarpState(PIP_LOCATION);
+  }
+
+  creationInProgress.add(PIP_LOCATION);
+
+  try {
+    const pipDocument = pipWindow.document;
+
+    state.container = pipDocument.createElement("div");
+    state.container.id = `better-lyrics-kawarp-${PIP_LOCATION}`;
+    state.container.style.cssText = `
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -2;
+      opacity: 0;
+      will-change: opacity;
+      transition: opacity 0.5s ease-out;
+    `;
+
+    state.canvas = pipDocument.createElement("canvas");
+    state.canvas.style.cssText = "width: 100%; height: 100%; display: block;";
+    state.container.appendChild(state.canvas);
+    pipDocument.body.prepend(state.container);
+
+    const dynamicSpeed = settings.kawarpAnimationSpeed * multipliers.speedMultiplier;
+
+    state.instance = new Kawarp(state.canvas, {
+      warpIntensity: settings.kawarpWarpIntensity,
+      blurPasses: settings.kawarpBlurPasses,
+      animationSpeed: dynamicSpeed,
+      transitionDuration: settings.kawarpTransitionDuration,
+      saturation: settings.kawarpSaturation,
+      dithering: settings.kawarpDithering,
+      scale: 1,
+    });
+
+    state.currentSpeed = dynamicSpeed;
+    state.targetSpeed = dynamicSpeed;
+    state.lastSettings = { ...settings };
+    state.lastMultipliers = { ...multipliers };
+
+    if (imageUrl) {
+      try {
+        await loadImageSafely(state.instance, imageUrl);
+        state.currentImageUrl = imageUrl;
+      } catch (error) {
+        logger.error("Failed to load artwork for pip kawarp:", error);
+      }
+    }
+
+    state.instance.start();
+    state.container.style.opacity = settings.kawarpOpacity.toString();
+
+    logger.log("Mounted kawarp in the floating window");
+    return true;
+  } catch (error) {
+    logger.error("Failed to mount kawarp in the floating window:", error);
+    destroyKawarp(PIP_LOCATION);
+    return false;
+  } finally {
+    creationInProgress.delete(PIP_LOCATION);
+  }
+};
+
+export const setPipKawarpImage = async (imageUrl: string): Promise<void> => {
+  const state = getKawarpState(PIP_LOCATION);
+  if (!state.instance || imageUrl === state.currentImageUrl) return;
+
+  if (state.isTransitioning) {
+    state.pendingImageUrl = imageUrl;
+    return;
+  }
+
+  await processImageTransition(state, imageUrl, PIP_LOCATION);
 };

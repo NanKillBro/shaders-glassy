@@ -1,41 +1,97 @@
 import React from "react";
+import { shadersIconUrl } from "../icons";
 
-export const AboutTab: React.FC = () => {
-  return (
-    <div className="tab-content">
-      <div className="empty-state">
-        <div className="empty-icon empty-icon--full-opacity">
-          <svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 512 512">
-            <path
-              d="M 512 256 C 512 397.385 397.385 512 256 512 C 114.615 512 0 397.385 0 256 C 0 114.615 114.615 0 256 0 C 397.385 0 512 114.615 512 256 Z M 216.877 101.494 C 129.312 123.247 77.337 215.006 103.18 301.61 C 121.687 363.631 176.581 409.295 240.38 414.757 C 287.712 418.809 329.728 405.453 364.631 372.705 C 402.973 336.73 419.903 291.754 414.474 239.817 C 408.507 182.738 378.509 140.758 327.553 113.442 C 291.849 96.169 254.947 92.037 216.877 101.494 Z M 111.49 258.009 C 111.657 203.346 135.045 160.293 181.947 132.029 C 257.535 86.476 354.347 118.494 389.27 199.487 C 425.321 283.1 374.187 380.741 284.761 397.772 C 230.539 408.099 184.56 391.825 147.1 351.356 C 123.778 324.1 111.384 293.035 111.49 258.009 Z M 275.782 205.816 C 285.751 205.816 295.066 205.859 304.381 205.802 C 312.272 205.755 316.316 201.706 316.432 193.751 C 316.512 188.253 316.544 182.75 316.422 177.253 C 316.252 169.635 312.169 165.693 304.507 165.667 C 292.342 165.626 280.176 165.637 268.011 165.66 C 259.036 165.678 255.746 169.021 255.743 178.109 C 255.734 207.273 255.743 236.436 255.729 265.6 C 255.729 267.311 255.584 269.021 255.493 271.034 C 252.926 269.96 250.993 269 248.965 268.328 C 234.723 263.608 221.596 265.768 210.09 275.438 C 198.291 285.355 193.507 298.277 196.25 313.409 C 200.094 334.613 218.73 348.223 240.237 346.153 C 260.242 344.228 275.646 326.851 275.757 305.878 C 275.856 287.047 275.781 268.215 275.782 248.883 C 275.782 234.286 275.782 220.188 275.782 205.816 Z"
-              fill="rgb(242, 12, 50)"
-            />
-            <path
-              d="M 216.877 101.494 C 129.312 123.247 77.337 215.006 103.18 301.61 C 121.687 363.631 176.581 409.295 240.38 414.757 C 287.712 418.809 329.728 405.453 364.631 372.705 C 402.973 336.73 419.903 291.754 414.474 239.817 C 408.507 182.738 378.509 140.758 327.553 113.442 C 291.849 96.169 254.947 92.037 216.877 101.494 Z M 111.49 258.009 C 111.657 203.346 135.045 160.293 181.947 132.029 C 257.535 86.476 354.347 118.494 389.27 199.487 C 425.321 283.1 374.187 380.741 284.761 397.772 C 230.539 408.099 184.56 391.825 147.1 351.356 C 123.778 324.1 111.384 293.035 111.49 258.009 Z M 275.782 205.816 C 285.751 205.816 295.066 205.859 304.381 205.802 C 312.272 205.755 316.316 201.706 316.432 193.751 C 316.512 188.253 316.544 182.75 316.422 177.253 C 316.252 169.635 312.169 165.693 304.507 165.667 C 292.342 165.626 280.176 165.637 268.011 165.66 C 259.036 165.678 255.746 169.021 255.743 178.109 C 255.734 207.273 255.743 236.436 255.729 265.6 C 255.729 267.311 255.584 269.021 255.493 271.034 C 252.926 269.96 250.993 269 248.965 268.328 C 234.723 263.608 221.596 265.768 210.09 275.438 C 198.291 285.355 193.507 298.277 196.25 313.409 C 200.094 334.613 218.73 348.223 240.237 346.153 C 260.242 344.228 275.646 326.851 275.757 305.878 C 275.856 287.047 275.781 268.215 275.782 248.883 C 275.782 234.286 275.782 220.188 275.782 205.816 Z"
-              fill="#fff"
-            />
-          </svg>
-        </div>
-        <h3>Kawarp Mode</h3>
-        <p>Kawarp uses the album artwork directly to create fluid, animated backgrounds. No color extraction needed.</p>
-        <p className="kawarp-credit">
-          <a href="https://kawarp.boidu.dev/" target="_blank" rel="noopener noreferrer">
-            Kawarp
-          </a>{" "}
-          is developed in-house by the Better Lyrics team.
-        </p>
+const KAWARP_URL = "https://kawarp.betterlyrics.org/";
+const BETTER_LYRICS_URL = "https://betterlyrics.org";
+const REPOSITORY_URL = "https://github.com/better-lyrics/shaders";
+const DISCORD_URL = "https://discord.gg/UsHE3d5fWF";
 
-        <div className="about-divider" />
-        <h3>Requires Better Lyrics</h3>
-        <p className="about-description">
-          This extension requires Better Lyrics to be installed for proper functionality.
-        </p>
-        <p className="kawarp-credit">
-          <a href="https://better-lyrics.boidu.dev/" target="_blank" rel="noopener noreferrer">
-            Install Better Lyrics
-          </a>
-        </p>
+export const AboutTab: React.FC = () => (
+  <div className="panel">
+    <div className="about__hero">
+      <img className="about__mark" src={shadersIconUrl} alt="" width={52} height={52} />
+      <div className="about__hero-text">
+        <h2 className="about__name">Shaders</h2>
+        <p className="about__tagline">Animated backgrounds for YouTube Music.</p>
       </div>
     </div>
-  );
-};
+
+    <div className="about__section">
+      <h3 className="about__heading">What it is</h3>
+      <p className="about__body">
+        Shaders paints the player with a fluid, warped blur built from the album artwork, and pulses it in time with the
+        music. Everything renders locally on your GPU.
+      </p>
+    </div>
+
+    <div className="about__section">
+      <h3 className="about__heading">Kawarp</h3>
+      <p className="about__body">
+        The renderer behind the effect, built in house by the Better Lyrics team. It reads the artwork directly, so
+        there is no colour extraction step and no palette to get wrong.
+      </p>
+    </div>
+
+    <div className="about__section">
+      <h3 className="about__heading">Use it in your own project</h3>
+      <p className="about__body">
+        Kawarp ships on its own as{" "}
+        <a href={KAWARP_URL} target="_blank" rel="noopener noreferrer">
+          @kawarp/core
+        </a>
+        , free to drop into anything. MIT, no dependencies, 6.7 KB gzipped, and about as light as a shader effect gets.
+        It is happy running all day behind a music player.
+      </p>
+    </div>
+
+    <div className="about__section">
+      <h3 className="about__heading">Better Lyrics</h3>
+      <p className="about__body">
+        Optional, but highly recommended to run alongside this. The two are built to sit together.{" "}
+        <a href={BETTER_LYRICS_URL} target="_blank" rel="noopener noreferrer">
+          Install Better Lyrics
+        </a>
+        .
+      </p>
+    </div>
+
+    <div className="about__section">
+      <h3 className="about__heading">Open source</h3>
+      <p className="about__body">
+        GPL v3. Source on{" "}
+        <a href={REPOSITORY_URL} target="_blank" rel="noopener noreferrer">
+          GitHub
+        </a>
+        . PRs welcome if you spot something to fix.
+      </p>
+    </div>
+
+    <div className="about__section">
+      <h3 className="about__heading">Community</h3>
+      <ul className="about__body about__list">
+        <li>
+          <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer">
+            Discord
+          </a>{" "}
+          for questions and chat.
+        </li>
+        <li>
+          <a href={`${REPOSITORY_URL}/issues/new/choose`} target="_blank" rel="noopener noreferrer">
+            File an issue
+          </a>{" "}
+          if something is broken.
+        </li>
+      </ul>
+    </div>
+
+    <div className="about__section">
+      <h3 className="about__heading">Made by</h3>
+      <p className="about__body">
+        <a href="https://boidu.dev" target="_blank" rel="noopener noreferrer">
+          Boidu
+        </a>
+        , with thanks to everyone in the Better Lyrics community who has tested it and reported bugs.
+      </p>
+    </div>
+  </div>
+);

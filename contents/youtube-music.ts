@@ -1,11 +1,13 @@
 import type { PlasmoCSConfig } from "plasmo";
 import { logger } from "@/shared/utils/logger";
+import * as adState from "./lib/adState";
 import * as animatedArtManager from "./lib/animatedArtManager";
 import * as audioAnalysis from "./lib/audioAnalysis";
 import * as gradientController from "./lib/gradientController";
 import * as kawarpManager from "./lib/kawarpManager";
 import * as messageHandler from "./lib/messageHandler";
 import * as navigationManager from "./lib/navigationManager";
+import * as pipManager from "./lib/pipManager";
 
 export const config: PlasmoCSConfig = {
   matches: ["https://music.youtube.com/*"],
@@ -25,10 +27,14 @@ const initializeApp = async (): Promise<void> => {
     onSettingsUpdate: gradientController.updateGradientSettings,
     getCurrentData: () => {
       const songInfo = messageHandler.getSongInfo();
+      const animatedArt = animatedArtManager.getAnimatedArtState();
       return {
         songTitle: songInfo.title,
         songAuthor: songInfo.author,
         gradientSettings: gradientController.getSettings(),
+        albumArtUrl: kawarpManager.getCurrentImageUrl(),
+        animatedArtUrl: animatedArt.active ? animatedArt.videoUrl : null,
+        isAd: adState.isAdPlaying(),
       };
     },
     getCacheInfo: animatedArtManager.getCacheInfo,
@@ -37,7 +43,7 @@ const initializeApp = async (): Promise<void> => {
     clearAnimatedArtCache: animatedArtManager.clearCache,
   });
 
-  audioAnalysis.initializeAudioAnalysis();
+  audioAnalysis.initializeAudioAnalysis(settings.showLogs);
 
   setTimeout(async () => {
     await gradientController.checkAndUpdateGradient();
@@ -58,11 +64,17 @@ const initializeApp = async (): Promise<void> => {
     gradientController.startAudioIfEnabled();
 
     navigationManager.initialize(gradientController.checkAndUpdateGradient);
+
+    pipManager.initialize({
+      getSettings: gradientController.getSettings,
+      getMultipliers: gradientController.getDynamicMultipliers,
+    });
   }, 0);
 };
 
 const cleanup = (): void => {
   navigationManager.cleanup();
+  pipManager.cleanup();
   gradientController.cleanup();
 };
 

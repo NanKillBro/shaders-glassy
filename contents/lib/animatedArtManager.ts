@@ -1,9 +1,9 @@
 import { Storage } from "@plasmohq/storage";
 import browser from "webextension-polyfill";
+import { ANIMATED_ART_VIDEO_ID } from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
 
 const API_ENDPOINT = "https://artwork.boidu.dev";
-const VIDEO_ELEMENT_ID = "bls-video";
 const NOT_FOUND_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const ALLOWED_VIDEO_HOSTS = new Set(["mvod.itunes.apple.com"]);
 
@@ -335,7 +335,7 @@ async function fetchArtworkUrl(
 
 function createVideoElement(videoUrl: string): HTMLVideoElement {
   const video = document.createElement("video");
-  video.id = VIDEO_ELEMENT_ID;
+  video.id = ANIMATED_ART_VIDEO_ID;
   video.muted = true;
   video.autoplay = true;
   video.loop = true;
@@ -367,7 +367,7 @@ function injectAnimatedArt(videoUrl: string): void {
     return;
   }
 
-  const existingVideo = thumbnail.querySelector(`#${VIDEO_ELEMENT_ID}`);
+  const existingVideo = thumbnail.querySelector(`#${ANIMATED_ART_VIDEO_ID}`);
   if (existingVideo) {
     existingVideo.remove();
   }
@@ -394,7 +394,7 @@ function injectAnimatedArt(videoUrl: string): void {
 }
 
 function getVideoElement(): HTMLVideoElement | null {
-  return document.querySelector(`#${VIDEO_ELEMENT_ID}`);
+  return document.querySelector(`#${ANIMATED_ART_VIDEO_ID}`);
 }
 
 // ── Crossfade utilities ──
@@ -697,6 +697,19 @@ export async function clearCache(): Promise<{ cleared: number }> {
     logger.log("Animated art: clearCache error", error);
     return { cleared: 0 };
   }
+}
+
+export interface AnimatedArtState {
+  active: boolean;
+  videoUrl: string | null;
+}
+
+export function getAnimatedArtState(): AnimatedArtState {
+  const video = getVideoElement();
+  if (!video) return { active: false, videoUrl: null };
+
+  const source = video.querySelector("source");
+  return { active: true, videoUrl: source?.src ?? video.currentSrc ?? null };
 }
 
 export function pauseAnimatedArt(): void {

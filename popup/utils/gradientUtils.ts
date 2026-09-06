@@ -4,16 +4,16 @@ export const capitalizeFirst = (str: string): string => {
 
 export const getControlLabel = (key: string): string => {
   const labels: Record<string, string> = {
-    audioSpeedMultiplier: "Beat Speed Multiplier",
-    audioBeatThreshold: "Beat Sensitivity",
     kawarpOpacity: "Opacity",
-    kawarpWarpIntensity: "Warp Intensity",
-    kawarpBlurPasses: "Blur Passes",
-    kawarpAnimationSpeed: "Animation Speed",
-    kawarpTransitionDuration: "Transition Duration",
+    kawarpWarpIntensity: "Warp intensity",
+    kawarpBlurPasses: "Blur passes",
     kawarpSaturation: "Saturation",
     kawarpDithering: "Dithering",
-    kawarpAudioScaleBoost: "Beat Scale Boost",
+    kawarpAnimationSpeed: "Animation speed",
+    kawarpTransitionDuration: "Transition duration",
+    audioBeatThreshold: "Beat threshold",
+    audioSpeedMultiplier: "Speed multiplier",
+    kawarpAudioScaleBoost: "Scale boost",
   };
 
   return labels[key] || capitalizeFirst(key);

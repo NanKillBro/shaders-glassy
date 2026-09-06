@@ -1,11 +1,11 @@
 import React from "react";
-import { GradientSettings } from "@/popup/types";
-import { ResetIcon } from "./ResetIcon";
+import { GradientSettings, defaultSettings } from "@/popup/types";
+import { formatValue, getControlConfig, getControlLabel } from "@/popup/utils";
+import { ResetIcon } from "./icons";
 import { Tooltip } from "./Tooltip";
-import { getControlConfig, formatValue, getControlLabel } from "@/popup/utils";
 
 interface ControlSliderProps {
-  keyName: string;
+  keyName: keyof GradientSettings;
   value: number;
   onChange: (key: keyof GradientSettings, value: number) => void;
   onReset: (key: keyof GradientSettings) => void;
@@ -13,46 +13,38 @@ interface ControlSliderProps {
 }
 
 export const ControlSlider: React.FC<ControlSliderProps> = ({ keyName, value, onChange, onReset, hint }) => {
-  const keyTyped = keyName as keyof GradientSettings;
   const { min, max, step } = getControlConfig(keyName);
+  const label = getControlLabel(keyName);
+  const defaultValue = defaultSettings[keyName] as number;
+  const isModified = value !== defaultValue;
+  const fill = max > min ? ((value - min) / (max - min)) * 100 : 0;
 
-  const labelText = (
-    <span
-      style={
-        hint
-          ? {
-              textDecoration: "underline dotted",
-              textUnderlineOffset: "3px",
-              cursor: "help",
-            }
-          : undefined
-      }
-    >
-      {getControlLabel(keyName)}
-    </span>
-  );
+  const labelNode = <span className="slider-row__label">{label}</span>;
 
   return (
-    <div className="control-row">
-      <div className="control-header">
-        <label className="control-label">
-          <span className="control-label__title">
-            <div className="control-label__title-fixed">
-              {hint ? <Tooltip content={hint}>{labelText}</Tooltip> : labelText}
-              <ResetIcon onClick={() => onReset(keyTyped)} title={`Reset ${keyName} to default`} />
-            </div>
-            <span className="control-label__body">{formatValue(keyName, value)}</span>
-          </span>
-        </label>
+    <div className={`slider-row${isModified ? " slider-row--modified" : ""}`}>
+      <div className="slider-row__head">
+        {hint ? <Tooltip content={hint}>{labelNode}</Tooltip> : labelNode}
+        <button
+          type="button"
+          className="slider-row__reset"
+          onClick={() => onReset(keyName)}
+          title={`Reset ${label.toLowerCase()} to ${formatValue(keyName, defaultValue)}`}
+        >
+          <ResetIcon size={13} />
+        </button>
+        <span className="slider-row__value">{formatValue(keyName, value)}</span>
       </div>
       <input
         type="range"
+        className="slider"
+        style={{ "--fill": `${fill}%` } as React.CSSProperties}
         min={min}
         max={max}
         step={step}
         value={value}
-        onChange={e => onChange(keyTyped, parseFloat(e.target.value))}
-        className="control-slider"
+        aria-label={label}
+        onChange={event => onChange(keyName, parseFloat(event.target.value))}
       />
     </div>
   );
