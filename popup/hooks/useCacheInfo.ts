@@ -8,9 +8,15 @@ interface CacheInfo {
 
 const sendMessage = async <T>(action: string, payload?: Record<string, unknown>): Promise<T | undefined> => {
   try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return undefined;
-    return (await browser.tabs.sendMessage(tab.id, { action, ...payload })) as T;
+    const [activeTab] = await browser.tabs.query({ active: true, currentWindow: true });
+    let tabId = activeTab?.id;
+    if (!activeTab?.url?.includes("music.youtube.com")) {
+      const ytTabs = await browser.tabs.query({ url: "https://music.youtube.com/*" });
+      const chosen = ytTabs.find(t => t.active) ?? ytTabs[0];
+      tabId = chosen?.id ?? tabId;
+    }
+    if (!tabId) return undefined;
+    return (await browser.tabs.sendMessage(tabId, { action, ...payload })) as T;
   } catch (error) {
     console.error(`Error sending message (${action}):`, error);
     return undefined;

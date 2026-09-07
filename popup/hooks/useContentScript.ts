@@ -24,12 +24,18 @@ export const useContentScript = () => {
 
   const sendMessage = useCallback(async (action: string, payload?: Record<string, unknown>) => {
     try {
-      const [tab] = await browser.tabs.query({
+      const [activeTab] = await browser.tabs.query({
         active: true,
         currentWindow: true,
       });
-      if (tab?.id) {
-        return await browser.tabs.sendMessage(tab.id, { action, ...payload });
+      let tabId = activeTab?.id;
+      if (!activeTab?.url?.includes("music.youtube.com")) {
+        const ytTabs = await browser.tabs.query({ url: "https://music.youtube.com/*" });
+        const chosen = ytTabs.find(t => t.active) ?? ytTabs[0];
+        tabId = chosen?.id ?? tabId;
+      }
+      if (tabId) {
+        return await browser.tabs.sendMessage(tabId, { action, ...payload });
       }
     } catch (error) {
       console.error(`Error sending message (${action}):`, error);

@@ -38,12 +38,12 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   kawarpDithering: 0.008,
   kawarpAudioScaleBoost: 2,
   // Audio responsive
-  audioResponsive: true,
+  audioResponsive: false,
   audioSpeedMultiplier: 2,
   audioBeatThreshold: 0.8,
   pauseOnInactive: true,
   // Other settings
-  showLogs: true,
+  showLogs: false,
   showOnBrowsePages: false,
   // Animated album art
   enableAnimatedArt: true,
