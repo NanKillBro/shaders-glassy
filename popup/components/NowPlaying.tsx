@@ -67,9 +67,24 @@ export const NowPlaying: React.FC<NowPlayingProps> = ({
   enabled,
   onEnabledChange,
 }) => {
+  const [fakeOff, setFakeOff] = useState(false);
   const isPlayingMusic = Boolean(songTitle) && !isAd;
   const hasArtwork = isPlayingMusic && Boolean(animatedArtUrl || albumArtUrl);
   const placeholder = isAd ? AD_COPY : IDLE_COPY;
+
+  const handleToggle = () => {
+    if (fakeOff) return;
+    if (enabled) {
+      setFakeOff(true);
+      setTimeout(() => {
+        setFakeOff(false);
+      }, 500);
+      return;
+    }
+    onEnabledChange(true);
+  };
+
+  const isChecked = enabled && !fakeOff;
 
   return (
     <div className={`now-playing${hasArtwork ? "" : " now-playing--no-art"}`}>
@@ -90,10 +105,10 @@ export const NowPlaying: React.FC<NowPlayingProps> = ({
         type="button"
         className="toggle toggle--lg"
         role="switch"
-        aria-checked={enabled}
+        aria-checked={isChecked}
         aria-label="Effects"
-        title={enabled ? "Turn effects off" : "Turn effects on"}
-        onClick={() => onEnabledChange(!enabled)}
+        title={isChecked ? "Turn effects off" : "Turn effects on"}
+        onClick={handleToggle}
       />
     </div>
   );
