@@ -9,6 +9,8 @@ interface NowPlayingProps {
   isAd: boolean;
   enabled: boolean;
   onEnabledChange: (value: boolean) => void;
+  /** Set while the host's theme manages these values — see shared/constants/themeLock.ts. */
+  locked?: boolean;
 }
 
 const FadingImage: React.FC<{ src: string }> = ({ src }) => {
@@ -66,6 +68,7 @@ export const NowPlaying: React.FC<NowPlayingProps> = ({
   isAd,
   enabled,
   onEnabledChange,
+  locked = false,
 }) => {
   const [fakeOff, setFakeOff] = useState(false);
   const isPlayingMusic = Boolean(songTitle) && !isAd;
@@ -85,6 +88,13 @@ export const NowPlaying: React.FC<NowPlayingProps> = ({
   };
 
   const isChecked = enabled && !fakeOff;
+  // The toggle always springs back on, so under the lock the tooltip names the reason
+  // rather than promising an action that will not stick.
+  const toggleTitle = locked
+    ? "Managed by the Glassy theme"
+    : isChecked
+      ? "Turn effects off"
+      : "Turn effects on";
 
   return (
     <div className={`now-playing${hasArtwork ? "" : " now-playing--no-art"}`}>
@@ -107,7 +117,7 @@ export const NowPlaying: React.FC<NowPlayingProps> = ({
         role="switch"
         aria-checked={isChecked}
         aria-label="Effects"
-        title={isChecked ? "Turn effects off" : "Turn effects on"}
+        title={toggleTitle}
         onClick={handleToggle}
       />
     </div>

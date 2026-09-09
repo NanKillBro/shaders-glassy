@@ -3,6 +3,7 @@ import {
   type DynamicMultipliers,
   type GradientSettings,
 } from "@/shared/constants/gradientSettings";
+import { applyThemeLock, isPageThemeLocked, isThemeLockSatisfied } from "@/shared/constants/themeLock";
 import { logger } from "@/shared/utils/logger";
 import * as animatedArtManager from "./animatedArtManager";
 import * as audioAnalysis from "./audioAnalysis";
@@ -77,7 +78,26 @@ const destroyBrowsePageEffects = (): void => {
   }
 };
 
+/**
+ * The host's preload races this content script, so the lock flag can land after the
+ * settings have already been read. Re-checked on every gradient pass rather than
+ * latched once at startup, which lets a late flag heal itself through the normal
+ * settings-update path.
+ */
+const enforceThemeLock = async (): Promise<void> => {
+  if (!isPageThemeLocked() || isThemeLockSatisfied(gradientSettings)) return;
+
+  logger.log("Glassy theme lock active - restoring default effect settings");
+  const locked = applyThemeLock(gradientSettings);
+  await storage.saveGradientSettings(locked);
+  await updateGradientSettings(locked);
+};
+
 export const checkAndUpdateGradient = async (): Promise<void> => {
+  // Ahead of the `enabled` guard: `enabled` is itself a managed setting, so a
+  // locked-but-disabled state has to be able to recover from here.
+  await enforceThemeLock();
+
   if (!gradientSettings.enabled) {
     logger.log("Effects disabled - skipping gradient update");
     return;
@@ -149,7 +169,11 @@ export const checkAndUpdateGradient = async (): Promise<void> => {
   }
 };
 
-export const updateGradientSettings = async (settings: GradientSettings): Promise<void> => {
+export const updateGradientSettings = async (incomingSettings: GradientSettings): Promise<void> => {
+  // A popup that has not noticed the lock yet, or an imported settings file, must
+  // not be able to push managed values back in.
+  const settings = isPageThemeLocked() ? applyThemeLock(incomingSettings) : incomingSettings;
+
   const wasEnabled = gradientSettings.enabled;
   const wasAudioResponsive = gradientSettings.audioResponsive;
   const wasShowOnBrowsePages = gradientSettings.showOnBrowsePages;
@@ -214,6 +238,15 @@ export const updateGradientSettings = async (settings: GradientSettings): Promis
 export const initializeSettings = async (): Promise<GradientSettings> => {
   gradientSettings = await storage.loadGradientSettings();
   logger.setEnabled(gradientSettings.showLogs);
+
+  // Under the lock the customised values are wiped, not merely ignored, so storage
+  // always matches what the popup shows. `showLogs` survives — see themeLock.ts.
+  if (isPageThemeLocked() && !isThemeLockSatisfied(gradientSettings)) {
+    logger.log("Glassy theme lock active - resetting stored effect settings to defaults");
+    gradientSettings = applyThemeLock(gradientSettings);
+    await storage.saveGradientSettings(gradientSettings);
+  }
+
   audioAnalysis.setPlaybackStateCallback(handlePlaybackStateChange);
   await animatedArtManager.initialize(gradientSettings.enableAnimatedArt);
   return gradientSettings;

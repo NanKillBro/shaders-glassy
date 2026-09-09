@@ -10,9 +10,17 @@ interface ControlSliderProps {
   onChange: (key: keyof GradientSettings, value: number) => void;
   onReset: (key: keyof GradientSettings) => void;
   hint?: string;
+  disabled?: boolean;
 }
 
-export const ControlSlider: React.FC<ControlSliderProps> = ({ keyName, value, onChange, onReset, hint }) => {
+export const ControlSlider: React.FC<ControlSliderProps> = ({
+  keyName,
+  value,
+  onChange,
+  onReset,
+  hint,
+  disabled = false,
+}) => {
   const { min, max, step } = getControlConfig(keyName);
   const label = getControlLabel(keyName);
   const defaultValue = defaultSettings[keyName] as number;
@@ -22,13 +30,14 @@ export const ControlSlider: React.FC<ControlSliderProps> = ({ keyName, value, on
   const labelNode = <span className="slider-row__label">{label}</span>;
 
   return (
-    <div className={`slider-row${isModified ? " slider-row--modified" : ""}`}>
+    <div className={`slider-row${isModified ? " slider-row--modified" : ""}${disabled ? " slider-row--disabled" : ""}`}>
       <div className="slider-row__head">
         {hint ? <Tooltip content={hint}>{labelNode}</Tooltip> : labelNode}
         <button
           type="button"
           className="slider-row__reset"
           onClick={() => onReset(keyName)}
+          disabled={disabled}
           title={`Reset ${label.toLowerCase()} to ${formatValue(keyName, defaultValue)}`}
         >
           <ResetIcon size={13} />
@@ -44,6 +53,7 @@ export const ControlSlider: React.FC<ControlSliderProps> = ({ keyName, value, on
         step={step}
         value={value}
         aria-label={label}
+        disabled={disabled}
         onChange={event => onChange(keyName, parseFloat(event.target.value))}
       />
     </div>

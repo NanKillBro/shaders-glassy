@@ -211,6 +211,47 @@ body {
   text-overflow: ellipsis;
 }
 
+/* -- Theme lock notice ----------------------------------------------------- */
+
+/* Sits above the tab bar so it explains the greyed-out controls on every tab. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  flex: none;
+  margin: 0 12px 9px;
+  padding: 9px 11px;
+  border-radius: var(--r-control);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--l2);
+}
+
+.notice__icon {
+  flex: none;
+  /* Nudged down to sit on the title's optical centre. */
+  margin-top: 1px;
+  color: var(--text-2);
+}
+
+.notice__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.notice__title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.notice__body {
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* -- Tabs ------------------------------------------------------------------ */
 
 .tabs {
@@ -770,12 +811,12 @@ body {
   transition: background-color 160ms var(--ease), color 160ms var(--ease), scale 160ms var(--ease);
 }
 
-.text-button:hover {
+.text-button:hover:not(:disabled) {
   background: var(--l2);
   color: var(--text);
 }
 
-.text-button:active {
+.text-button:active:not(:disabled) {
   scale: 0.96;
 }
 
@@ -795,6 +836,76 @@ body {
 
 .footer__spacer {
   flex: 1;
+}
+
+/* -- Locked controls ------------------------------------------------------- */
+
+/* Last in the file on purpose: these tie with the state rules they override
+   (`.toggle[aria-checked="true"]`, `.slider-row:hover`), so source order decides.
+   `:disabled` on the elements themselves is what actually blocks input — this only
+   makes that legible. */
+
+.text-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.row--disabled,
+.row--disabled:hover {
+  background: transparent;
+}
+
+.row--disabled .row__label,
+.row--disabled .row__hint {
+  color: var(--text-3);
+}
+
+.toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.toggle:disabled[aria-checked="true"] {
+  /* Desaturated so a pinned-on switch does not read as an accent-coloured
+     affordance the user could still act on. */
+  background: var(--l3);
+}
+
+.slider-row--disabled,
+.slider-row--disabled:hover {
+  background: transparent;
+}
+
+.slider-row--disabled .slider-row__label,
+.slider-row--disabled .slider-row__value {
+  color: var(--text-3);
+}
+
+/* Nothing to reset while the values are managed, so the button never reveals. */
+.slider-row--disabled .slider-row__reset {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.slider:disabled::-webkit-slider-runnable-track {
+  background: var(--l2);
+}
+
+.slider:disabled::-webkit-slider-thumb {
+  background: var(--text-3);
+}
+
+.slider:disabled::-moz-range-progress {
+  background: var(--l3);
+}
+
+.slider:disabled::-moz-range-thumb {
+  background: var(--text-3);
 }
 
 @media (prefers-reduced-motion: reduce) {

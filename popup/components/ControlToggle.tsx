@@ -5,13 +5,14 @@ interface ControlToggleProps {
   hint?: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  disabled?: boolean;
 }
 
-export const ControlToggle: React.FC<ControlToggleProps> = ({ label, hint, value, onChange }) => {
+export const ControlToggle: React.FC<ControlToggleProps> = ({ label, hint, value, onChange, disabled = false }) => {
   const labelId = useId();
 
   return (
-    <div className="row">
+    <div className={`row${disabled ? " row--disabled" : ""}`}>
       <div className="row__text">
         <span className="row__label" id={labelId}>
           {label}
@@ -24,6 +25,7 @@ export const ControlToggle: React.FC<ControlToggleProps> = ({ label, hint, value
         role="switch"
         aria-checked={value}
         aria-labelledby={labelId}
+        disabled={disabled}
         onClick={() => onChange(!value)}
       />
     </div>

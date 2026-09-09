@@ -1,6 +1,7 @@
 import React from "react";
 import "./popup.css";
 
+import { isPopupThemeLocked } from "@/shared/constants/themeLock";
 import {
   AboutTab,
   AudioTab,
@@ -12,9 +13,13 @@ import {
   MotionTab,
   NowPlaying,
   TabBar,
+  ThemeLockNotice,
 } from "./components";
 import { useContentScript, useGradientSettings, useTabState } from "./hooks";
 import { GradientSettings, SettingsTab, defaultSettings } from "./types";
+
+/** Fixed for the life of the window: the host stamps it on the URL before load. */
+const isLocked = isPopupThemeLocked();
 
 const Popup: React.FC = () => {
   const { activeTab, selectTab, isAboutOpen, toggleAbout } = useTabState();
@@ -27,7 +32,7 @@ const Popup: React.FC = () => {
     resetGradientSettings,
     exportSettings,
     importSettings,
-  } = useGradientSettings();
+  } = useGradientSettings(isLocked);
 
   const handleSettingChange = async (key: keyof GradientSettings, value: number) => {
     await updateGradientSettings(updateGradientSetting(key, value));
@@ -56,13 +61,15 @@ const Popup: React.FC = () => {
     settings: gradientSettings,
     onSettingChange: handleSettingChange,
     onSettingReset: handleSettingReset,
+    locked: isLocked,
   };
 
   const panels: Record<SettingsTab, React.ReactNode> = {
-    general: <GeneralTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
+    general: <GeneralTab settings={gradientSettings} onToggleChange={handleToggleChange} locked={isLocked} />,
     look: <LookTab {...sliderProps} />,
     motion: <MotionTab {...sliderProps} />,
     audio: <AudioTab {...sliderProps} onToggleChange={handleToggleChange} />,
+    // Debug logs and the artwork cache tools stay usable for troubleshooting.
     extras: <ExtrasTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
   };
 
@@ -78,8 +85,10 @@ const Popup: React.FC = () => {
         isAd={isAd}
         enabled={gradientSettings.enabled}
         onEnabledChange={value => handleToggleChange("enabled", value)}
+        locked={isLocked}
       />
 
+      {!isAboutOpen && isLocked && <ThemeLockNotice />}
       {!isAboutOpen && <TabBar activeTab={activeTab} onTabChange={selectTab} />}
 
       <div className="scroll">{isAboutOpen ? <AboutTab /> : panels[activeTab]}</div>
@@ -90,6 +99,7 @@ const Popup: React.FC = () => {
         onImport={handleImport}
         onExport={exportSettings}
         onReset={handleResetAll}
+        locked={isLocked}
       />
     </div>
   );

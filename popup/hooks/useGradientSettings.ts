@@ -6,6 +6,7 @@ import {
   GRADIENT_SETTINGS_STORAGE_KEY,
   type GradientSettings,
 } from "@/shared/constants/gradientSettings";
+import { applyThemeLock, isThemeLockSatisfied } from "@/shared/constants/themeLock";
 
 const storage = new Storage({ area: "local" });
 
@@ -27,7 +28,7 @@ interface LegacySettings {
   audioScaleBoost?: number;
 }
 
-export const useGradientSettings = () => {
+export const useGradientSettings = (locked = false) => {
   const [storedSettings, setStoredSettings] = useStorage<Partial<GradientSettings>>(
     {
       key: GRADIENT_SETTINGS_STORAGE_KEY,
@@ -36,12 +37,16 @@ export const useGradientSettings = () => {
     DEFAULT_GRADIENT_SETTINGS
   );
 
+  // Clamping here covers everything downstream: `localSettings` is derived from this,
+  // and every write path sends the whole object back to storage, so any surviving
+  // write (toggling Debug logs, say) also persists the reset to defaults.
   const mergedSettings = useMemo<GradientSettings>(() => {
-    return {
+    const merged = {
       ...DEFAULT_GRADIENT_SETTINGS,
       ...storedSettings,
     };
-  }, [storedSettings]);
+    return locked ? applyThemeLock(merged) : merged;
+  }, [storedSettings, locked]);
 
   const [localSettings, setLocalSettings] = useState<GradientSettings>(mergedSettings);
   const debounceRef = useRef<NodeJS.Timeout>();
@@ -49,6 +54,16 @@ export const useGradientSettings = () => {
   useEffect(() => {
     setLocalSettings(mergedSettings);
   }, [mergedSettings]);
+
+  // The customised values are wiped, not merely hidden, so storage matches what is
+  // shown even when no music page has loaded to do it. Self-terminating: after the
+  // write lands, the lock is satisfied and this returns early.
+  useEffect(() => {
+    if (!locked) return;
+    const stored = { ...DEFAULT_GRADIENT_SETTINGS, ...storedSettings };
+    if (isThemeLockSatisfied(stored)) return;
+    void setStoredSettings(applyThemeLock(stored));
+  }, [locked, storedSettings, setStoredSettings]);
 
   const updateGradientSetting = useCallback(
     (key: keyof GradientSettings, value: number) => {

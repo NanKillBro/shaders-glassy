@@ -16,6 +16,7 @@ export const AudioTab: React.FC<AudioTabProps> = ({ onToggleChange, ...sliderPro
       hint="Pulse the background in time with the music."
       value={sliderProps.settings.audioResponsive}
       onChange={value => onToggleChange("audioResponsive", value)}
+      disabled={sliderProps.locked}
     />
     <div className={`subgroup${sliderProps.settings.audioResponsive ? "" : " subgroup--disabled"}`}>
       <SliderPanel keys={[...AUDIO_KEYS]} {...sliderProps} />
