@@ -41,7 +41,7 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   audioResponsive: false,
   audioSpeedMultiplier: 2,
   audioBeatThreshold: 0.8,
-  pauseOnInactive: true,
+  pauseOnInactive: false,
   // Other settings
   showLogs: false,
   showOnBrowsePages: false,
