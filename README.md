@@ -17,6 +17,7 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
+- **Video Ambient Colors**: During music videos, colors follow decoded frames using a 128 × 72 sample, staged downsampling, brief temporal smoothing, and three blur passes to reduce shimmer. Colors retain their top/bottom and left/right orientation with gentler, bounded warping and beat-driven zoom. Audio-only or unreadable sources fall back to album artwork and your usual effect settings.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
 - **Real-time Configuration**: Adjust settings and see changes instantly via the popup

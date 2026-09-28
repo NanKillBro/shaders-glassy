@@ -17,6 +17,7 @@
     "package:edge": "plasmo package --target=edge-mv3",
     "lint:fix": "biome lint --write && biome format --write",
     "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
     "pack": "pnpm lint:fix && pnpm typecheck && pnpm build && pnpm package"
   },
   "dependencies": {
