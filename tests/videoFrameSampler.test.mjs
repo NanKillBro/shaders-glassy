@@ -7,7 +7,7 @@ const source = readFileSync(new URL("../contents/lib/videoFrameSampler.ts", impo
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 },
 });
-const { startVideoFrameSampler, smoothVideoPixels, FRAME_INTERVAL_MS } = await import(
+const { startVideoFrameSampler, smoothVideoPixels } = await import(
   `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
 );
 
@@ -29,6 +29,8 @@ function setup(t, samplingSettings, support = {}) {
     reductions: [],
     surfaces: [],
     floatReads: 0,
+    gpuFrames: [],
+    gpuHandles: true,
     floatValues: [0.50048828125, 0.25, 0.125, 1],
   };
   const createCanvas = () => ({
@@ -37,27 +39,36 @@ function setup(t, samplingSettings, support = {}) {
     getContext: (_type, attributes) => {
       state.surfaces.push(attributes);
       return {
-      getContextAttributes: () => ({ colorType: support.floatCanvas &&
-        (attributes.willReadFrequently || support.floatStages !== false) ? attributes.colorType : "unorm8" }),
-      setTransform: (...values) => assert.deepEqual(values, [1, 0, 0, -1, 0, samplingSettings?.height ?? 72]),
-      drawImage: (input, _x, _y, width, height) => {
-        state.reductions.push({
-          from: [input.videoWidth ?? input.width, input.videoHeight ?? input.height],
-          to: [width, height],
-        });
-        state.draws++;
-      },
-      getImageData: (_x, _y, width, height, options) => {
-        state.reads++;
-        if (state.error) throw state.error;
-        if (options?.pixelFormat === "rgba-float16") {
-          state.floatReads++;
-          if (support.floatReadback === false) throw new TypeError("Unsupported pixel format");
-          return {data: Object.assign([...state.floatValues], {BYTES_PER_ELEMENT: 2}), pixelFormat: "rgba-float16", width, height};
-        }
-        return { data: new Uint8ClampedArray([state.video.currentTime, 0, 0, 255]), width, height };
-      },
-    };
+        getContextAttributes: () => ({
+          colorType:
+            support.floatCanvas && (attributes.willReadFrequently || support.floatStages !== false)
+              ? attributes.colorType
+              : "unorm8",
+        }),
+        setTransform: (...values) => assert.deepEqual(values, [1, 0, 0, -1, 0, samplingSettings?.height ?? 72]),
+        drawImage: (input, _x, _y, width, height) => {
+          state.reductions.push({
+            from: [input.videoWidth ?? input.width, input.videoHeight ?? input.height],
+            to: [width, height],
+          });
+          state.draws++;
+        },
+        getImageData: (_x, _y, width, height, options) => {
+          state.reads++;
+          if (state.error) throw state.error;
+          if (options?.pixelFormat === "rgba-float16") {
+            state.floatReads++;
+            if (support.floatReadback === false) throw new TypeError("Unsupported pixel format");
+            return {
+              data: Object.assign([...state.floatValues], { BYTES_PER_ELEMENT: 2 }),
+              pixelFormat: "rgba-float16",
+              width,
+              height,
+            };
+          }
+          return { data: new Uint8ClampedArray([state.video.currentTime, 0, 0, 255]), width, height };
+        },
+      };
     },
   });
   globalThis.document = { createElement: createCanvas };
@@ -76,6 +87,12 @@ function setup(t, samplingSettings, support = {}) {
   const stop = startVideoFrameSampler({
     getSettings: samplingSettings ? () => samplingSettings : undefined,
     getVideo: () => state.video,
+    onVideoFrame: support.gpu
+      ? (_video, info) => {
+          state.gpuFrames.push(info);
+          return state.gpuHandles;
+        }
+      : undefined,
     isActive: () => state.active,
     onFrame: frame => state.frames.push(frame),
     onUnavailable: () => state.unavailable++,
@@ -226,7 +243,14 @@ test("temporal response depends on elapsed time and resets without carrying old 
   assert.deepEqual(Array.from(smoothVideoPixels(firstFrame, null, 0)), Array.from(firstFrame));
 });
 
-const samplingDefaults = () => ({ width: 128, height: 72, frameRate: 0, responseMs: 65, stagedDownsampling: true, downsampleFactor: 2 });
+const samplingDefaults = () => ({
+  width: 128,
+  height: 72,
+  frameRate: 0,
+  responseMs: 65,
+  stagedDownsampling: true,
+  downsampleFactor: 2,
+});
 
 test("resizes a paused frame live and rebuilds the downsampling chain", t => {
   const settings = samplingDefaults();
@@ -282,7 +306,13 @@ test("downsampling can be bypassed or use a different reduction factor", t => {
   settings.downsampleFactor = 4;
   state.reductions = [];
   state.tick();
-  assert.deepEqual(state.reductions.map(r => r.to), [[480, 270], [128, 72]]);
+  assert.deepEqual(
+    state.reductions.map(r => r.to),
+    [
+      [480, 270],
+      [128, 72],
+    ]
+  );
 });
 
 test("color response is configurable and zero disables temporal blending", () => {
@@ -296,7 +326,6 @@ test("color response is configurable and zero disables temporal blending", () =>
   smoothVideoPixels(slow, new Float32Array(dark), 16, 200);
   assert.ok(fast[0] > slow[0]);
 });
-
 
 test("float canvases retain sub-byte colors through every resize and smoothing", t => {
   const { state } = setup(t, samplingDefaults(), { floatCanvas: true });
@@ -318,7 +347,7 @@ test("float canvases retain sub-byte colors through every resize and smoothing",
 });
 
 test("precision can be toggled live while paused without mixing normalized and byte histories", t => {
-  const settings = {...samplingDefaults(), highPrecision: true};
+  const settings = { ...samplingDefaults(), highPrecision: true };
   const { state } = setup(t, settings, { floatCanvas: true });
   state.video.paused = true;
   state.tick();
@@ -334,7 +363,7 @@ test("precision can be toggled live while paused without mixing normalized and b
 });
 
 test("unsupported float readback falls back once and continues sampling", t => {
-  const { state } = setup(t, samplingDefaults(), {floatCanvas: true, floatReadback: false});
+  const { state } = setup(t, samplingDefaults(), { floatCanvas: true, floatReadback: false });
   state.tick();
   assert.equal(state.frames.at(-1).samplingPrecision, "unorm8");
   assert.match(state.frames.at(-1).fallbackReason, /readback/);
@@ -345,7 +374,7 @@ test("unsupported float readback falls back once and continues sampling", t => {
 });
 
 test("unsupported float stage falls back the entire downsampling chain", t => {
-  const { state } = setup(t, samplingDefaults(), {floatCanvas: true, floatStages: false});
+  const { state } = setup(t, samplingDefaults(), { floatCanvas: true, floatStages: false });
   state.tick();
   assert.equal(state.frames.at(-1).samplingPrecision, "unorm8");
   assert.match(state.frames.at(-1).fallbackReason, /backing store/);
@@ -354,9 +383,54 @@ test("unsupported float stage falls back the entire downsampling chain", t => {
 });
 
 test("protected float sources are blocked without retrying in byte mode", t => {
-  const { state } = setup(t, samplingDefaults(), {floatCanvas: true});
+  const { state } = setup(t, samplingDefaults(), { floatCanvas: true });
   state.error = new DOMException("Protected source", "SecurityError");
-  state.tick(); state.tick();
+  state.tick();
+  state.tick();
   assert.equal(state.reads, 1);
   assert.equal(state.frames.length, 0);
+});
+
+test("GPU consumers receive scheduled metadata without CPU draws or readback", t => {
+  const settings = { ...samplingDefaults(), gpuProcessing: true, frameRate: 10 };
+  const { state } = setup(t, settings, { gpu: true });
+  state.tick();
+  const first = state.gpuFrames.at(-1);
+  assert.equal(first.resetHistory, true);
+  state.now += 50;
+  state.video.currentTime += 0.05;
+  state.tick();
+  assert.equal(state.gpuFrames.at(-1), first, "frame limit must also apply to GPU captures");
+  state.now += 50;
+  state.video.currentTime += 0.05;
+  state.tick();
+  assert.notEqual(state.gpuFrames.at(-1).id, first.id);
+  assert.equal(state.reads, 0);
+  assert.equal(state.draws, 0);
+  state.video.paused = true;
+  state.video.currentTime = 5;
+  state.tick();
+  assert.equal(state.gpuFrames.at(-1).resetHistory, true);
+  const paused = state.gpuFrames.at(-1);
+  state.tick();
+  assert.equal(state.gpuFrames.at(-1), paused);
+});
+
+test("GPU fallback and live CPU/GPU changes preserve frame delivery", t => {
+  const settings = { ...samplingDefaults(), gpuProcessing: true };
+  const { state } = setup(t, settings, { gpu: true });
+  state.tick();
+  state.gpuHandles = false;
+  state.tick();
+  assert.equal(state.reads, 1, "late consumer can request CPU pixels of a cached GPU frame");
+  assert.equal(state.frames.at(-1).id, state.gpuFrames.at(-1).id);
+  state.gpuHandles = true;
+  settings.gpuProcessing = false;
+  state.tick();
+  assert.equal(state.reads, 2);
+  const cpuId = state.frames.at(-1).id;
+  settings.gpuProcessing = true;
+  state.tick();
+  assert.ok(state.gpuFrames.at(-1).id > cpuId);
+  assert.equal(state.reads, 2);
 });

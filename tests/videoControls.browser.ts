@@ -1,5 +1,6 @@
 import Kawarp from "@kawarp/core";
 import { brightnessForHighlight, measureHighlightLuminance } from "../contents/lib/artworkBrightness";
+import { GpuVideoProcessor } from "../contents/lib/gpuVideoProcessor";
 import {
   PIP_LOCATION,
   createPipKawarp,
@@ -11,7 +12,7 @@ import {
 import { DEFAULT_DYNAMIC_MULTIPLIERS, DEFAULT_GRADIENT_SETTINGS } from "../shared/constants/gradientSettings";
 
 // Run on an otherwise empty visible page. Uses a synthetic moving video, never user playback.
-export async function runVideoControlsChecks() {
+export async function runVideoControlsChecks(gpu = false, forceGpuFailure = false) {
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
   const check = (condition: unknown, message: string) => {
     if (!condition) throw new Error(message);
@@ -55,6 +56,24 @@ export async function runVideoControlsChecks() {
     info(...args);
   };
   const original = Kawarp.prototype.loadImageData;
+  const originalTexture = Kawarp.prototype.loadTexture;
+  const originalProcess = GpuVideoProcessor.prototype.process;
+  if (forceGpuFailure)
+    GpuVideoProcessor.prototype.process = () => {
+      throw new Error("Forced GPU failure");
+    };
+  const expectGpu = gpu && !forceGpuFailure;
+  let gpuUploads = 0;
+  Kawarp.prototype.loadTexture = function (texture, highPrecision) {
+    instance = this;
+    uploads++;
+    gpuUploads++;
+    width = settings.videoSampleWidth;
+    height = settings.videoSampleHeight;
+    if (highPrecision) floatUploads++;
+    else byteUploads++;
+    return originalTexture.call(this, texture, highPrecision);
+  };
   let instance: Kawarp | undefined;
   let fractionalUploads = 0;
   let floatUploads = 0;
@@ -75,7 +94,7 @@ export async function runVideoControlsChecks() {
     return original.call(this, data, w, h);
   };
   const artwork = URL.createObjectURL(await new Promise<Blob>(resolve => source.toBlob(blob => resolve(blob!))));
-  let settings = { ...DEFAULT_GRADIENT_SETTINGS, kawarpTransitionDuration: 50 };
+  let settings = { ...DEFAULT_GRADIENT_SETTINGS, kawarpTransitionDuration: 50, videoGpuProcessing: gpu };
   const update = (patch: Partial<typeof settings>) => {
     settings = { ...settings, ...patch };
     updateKawarpSettings(settings, DEFAULT_DYNAMIC_MULTIPLIERS, PIP_LOCATION);
@@ -174,7 +193,17 @@ export async function runVideoControlsChecks() {
       pixel
     );
     check(pixel[0] + pixel[1] + pixel[2] > 0, "Blur bypass rendered black");
-    check(fractionalUploads > 0, "Float sampling still rounded every color to bytes");
+    if (!expectGpu) check(fractionalUploads > 0, "Float sampling still rounded every color to bytes");
+    check(expectGpu ? gpuUploads > 0 : gpuUploads === 0, "GPU selection/fallback failed");
+    if (expectGpu) {
+      update({ videoGpuProcessing: false });
+      await wait(150);
+      check(fractionalUploads > 0, "CPU mode switch failed");
+      const previousGpuUploads = gpuUploads;
+      update({ videoGpuProcessing: true });
+      await wait(150);
+      check(gpuUploads > previousGpuUploads, "GPU mode switch failed");
+    }
     const whiteFloat = measureHighlightLuminance(new Float32Array([1, 1, 1, 1]));
     const whiteByte = measureHighlightLuminance(new Uint8ClampedArray([255, 255, 255, 255]));
     check(
@@ -195,6 +224,7 @@ export async function runVideoControlsChecks() {
     return {
       passed: true,
       uploads,
+      gpuUploads,
       floatUploads,
       fractionalUploads,
       byteUploads,
@@ -206,6 +236,8 @@ export async function runVideoControlsChecks() {
     destroyKawarp(PIP_LOCATION);
     console.info = info;
     Kawarp.prototype.loadImageData = original;
+    Kawarp.prototype.loadTexture = originalTexture;
+    GpuVideoProcessor.prototype.process = originalProcess;
     window.clearInterval(timer);
     stream.getTracks().forEach(track => track.stop());
     player.remove();

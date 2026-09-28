@@ -157,6 +157,7 @@ export const useGradientSettings = () => {
               "videoAudioResponsive",
               "videoStagedDownsampling",
               "videoHighPrecisionSampling",
+              "videoGpuProcessing",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {

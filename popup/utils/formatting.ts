@@ -1,5 +1,7 @@
 export const formatValue = (key: string, value: number): string => {
   if (value === undefined || value === null) return "0";
+  if (key === "videoGpuBrightnessSize") return `${Math.round(value)} × ${Math.round(value)}`;
+  if (key === "videoGpuBrightnessInterval") return `${Math.round(value)} ms`;
   if (key === "videoFrameRate") return value === 0 ? "Native" : `${Math.round(value)} FPS`;
   if (key === "videoSampleWidth" || key === "videoSampleHeight") return `${Math.round(value)} px`;
   if (["videoColorResponse", "videoFrameTransition", "videoBrightnessTransition"].includes(key))

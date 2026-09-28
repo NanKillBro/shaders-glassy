@@ -6,6 +6,8 @@ export interface ControlConfig {
 
 export const getControlConfig = (key: string): ControlConfig => {
   const videoControls: Record<string, ControlConfig> = {
+    videoGpuBrightnessSize: { min: 8, max: 64, step: 8 },
+    videoGpuBrightnessInterval: { min: 0, max: 1000, step: 25 },
     videoOpacity: { min: 0, max: 1, step: 0.01 },
     videoWarpIntensity: { min: 0, max: 1, step: 0.01 },
     videoBlurPasses: { min: 0, max: 40, step: 1 },

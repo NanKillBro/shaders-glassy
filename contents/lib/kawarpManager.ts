@@ -13,7 +13,8 @@ import { videoMotion } from "@/shared/utils/videoSettings";
 import Kawarp from "@kawarp/core";
 import { isAdPlaying } from "./adState";
 import { brightnessForHighlight, measureArtworkHighlight, measureHighlightLuminance } from "./artworkBrightness";
-import { type VideoFrameSample, startVideoFrameSampler } from "./videoFrameSampler";
+import { GpuVideoProcessor } from "./gpuVideoProcessor";
+import { startVideoFrameSampler } from "./videoFrameSampler";
 
 interface KawarpState {
   backdrop: HTMLDivElement | null;
@@ -37,7 +38,9 @@ interface KawarpState {
   speedAnimationId: number | null;
   isPaused: boolean;
   highlightLuminance: number | null;
-  videoFrame: VideoFrameSample | null;
+  videoFrame: { id?: number; samplingPrecision?: string; highPrecisionRequested?: boolean } | null;
+  gpuVideo: GpuVideoProcessor | null;
+  gpuUnavailable: boolean;
   stopWatchingOutput: (() => void) | null;
 }
 
@@ -64,6 +67,8 @@ const createEmptyState = (): KawarpState => ({
   isPaused: false,
   highlightLuminance: null,
   videoFrame: null,
+  gpuVideo: null,
+  gpuUnavailable: false,
   stopWatchingOutput: null,
 });
 
@@ -187,6 +192,8 @@ const loadArtwork = async (state: KawarpState, instance: Kawarp, url: string): P
   if (state.instance !== instance) return;
   const wasVideo = !!state.videoFrame;
   state.videoFrame = null;
+  state.gpuVideo?.dispose();
+  state.gpuVideo = null;
   applyModeSettings(state, wasVideo);
   state.highlightLuminance = highlightLuminance;
   applyArtworkBrightness(state);
@@ -272,6 +279,7 @@ const ensureVideoSampler = (): void => {
         stagedDownsampling: settings.videoStagedDownsampling,
         downsampleFactor: settings.videoDownsampleFactor,
         highPrecision: settings.videoHighPrecisionSampling,
+        gpuProcessing: settings.videoGpuProcessing,
       };
     },
     getVideo: () => {
@@ -279,12 +287,88 @@ const ensureVideoSampler = (): void => {
       // Scope to the actual player; previews and injected artwork are separate media.
       return document.querySelector<HTMLVideoElement>(`#movie_player video:not(#${ANIMATED_ART_VIDEO_ID})`);
     },
+    onVideoFrame: (video, info) => {
+      let handled = true;
+      for (const state of kawarps.values()) {
+        if (!canSampleForState(state) || state.isTransitioning || !state.lastSettings?.videoEnabled) continue;
+        const settings = state.lastSettings;
+        if (!settings.videoGpuProcessing || state.gpuUnavailable) {
+          handled = false;
+          continue;
+        }
+        try {
+          if (!state.gpuVideo) {
+            const gl = state.canvas?.getContext("webgl2");
+            if (!gl) throw new Error("WebGL2 unavailable");
+            const processor = new GpuVideoProcessor(gl, highlight => {
+              if (state.gpuVideo !== processor || !state.videoFrame || state.isTransitioning) return;
+              state.highlightLuminance = highlight;
+              applyArtworkBrightness(state);
+            });
+            state.gpuVideo = processor;
+          }
+          const result = state.gpuVideo.process(video, info, {
+            enabled: settings.videoAutoDim,
+            size: settings.videoGpuBrightnessSize,
+            intervalMs: settings.videoGpuBrightnessInterval,
+          });
+          if (!result.changed) continue;
+          const instance = state.instance!;
+          const entering = !state.videoFrame;
+          const precision = result.highPrecision ? "gpu-float16" : "gpu-unorm8";
+          const logPrecision = state.videoFrame?.samplingPrecision !== precision;
+          state.videoFrame = {
+            id: info.id,
+            samplingPrecision: precision,
+            highPrecisionRequested: settings.videoHighPrecisionSampling,
+          };
+          if (entering) {
+            state.highlightLuminance = null;
+            applyModeSettings(state);
+          }
+          const transitionMs = Math.min(settings.videoFrameTransition, info.intervalMs);
+          instance.transitionDuration = transitionMs;
+          instance.loadTexture(result.texture, result.highPrecision);
+          if (logPrecision)
+            console.info("[BLS] Video color precision", {
+              canvas: state.container?.id,
+              processing: "gpu",
+              sampling: result.highPrecision ? "float16" : "unorm8",
+              smoothing: "float32",
+              sourceTexture: result.highPrecision ? "rgba16f" : "rgba8",
+              fullFrameReadback: false,
+              brightnessReadback: "async thumbnail when dimming is enabled",
+              float16DrawingBuffer: instance.highPrecisionOutput,
+              compositorPrecisionVerified: false,
+              extendedRangeOutput: false,
+            });
+          applyArtworkBrightness(state);
+          if (state.isPaused) {
+            if (state.transitionTimeoutId !== null) clearTimeout(state.transitionTimeoutId);
+            state.transitionTimeoutId = window.setTimeout(() => {
+              state.transitionTimeoutId = null;
+              if (state.instance === instance && state.isPaused) instance.renderFrame();
+            }, transitionMs);
+          }
+        } catch (error) {
+          state.gpuVideo?.dispose();
+          state.gpuVideo = null;
+          state.gpuUnavailable = true;
+          if (state.videoFrame?.id === info.id) state.videoFrame = null;
+          console.info("[BLS] GPU video processing unavailable; using CPU fallback", String(error));
+          handled = false;
+        }
+      }
+      return handled;
+    },
     onFrame: frame => {
       let highlight: number | null = null;
       for (const state of kawarps.values()) {
         if (!canSampleForState(state) || state.isTransitioning || !state.lastSettings?.videoEnabled) continue;
         const instance = state.instance!;
-        if (state.videoFrame === frame) continue;
+        if (state.videoFrame?.id === frame.id) continue;
+        state.gpuVideo?.dispose();
+        state.gpuVideo = null;
         const enteringVideo = !state.videoFrame;
         const precisionChanged =
           enteringVideo ||
@@ -301,6 +385,7 @@ const ensureVideoSampler = (): void => {
         if (precisionChanged || previousFloatSource !== instance.highPrecisionSource) {
           console.info("[BLS] Video color precision", {
             canvas: state.container?.id,
+            processing: "cpu",
             highPrecisionRequested: state.lastSettings.videoHighPrecisionSampling,
             sampling: frame.samplingPrecision,
             smoothingUpload: frame.pixels.data instanceof Float32Array ? "float32" : "unorm8",
@@ -668,6 +753,8 @@ export const destroyKawarp = (location?: string): void => {
   if (location) {
     const state = getKawarpState(location);
     logger.log(`Destroying kawarp for location: ${location}`);
+    state.gpuVideo?.dispose();
+    state.gpuVideo = null;
     state.stopWatchingOutput?.();
     state.stopWatchingOutput = null;
 
@@ -859,6 +946,7 @@ export const updateKawarpSettings = (
       return;
     }
 
+    if (state.lastSettings?.videoGpuProcessing !== settings.videoGpuProcessing) state.gpuUnavailable = false;
     state.lastSettings = { ...settings };
     state.lastMultipliers = { ...multipliers };
     applyModeSettings(state);

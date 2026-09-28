@@ -4,6 +4,8 @@ export const capitalizeFirst = (str: string): string => {
 
 export const getControlLabel = (key: string): string => {
   const labels: Record<string, string> = {
+    videoGpuBrightnessSize: "Brightness sample size",
+    videoGpuBrightnessInterval: "Brightness check interval",
     videoOpacity: "Opacity",
     videoWarpIntensity: "Warp intensity",
     videoBlurPasses: "Blur passes",

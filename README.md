@@ -42,10 +42,17 @@ reset with the other settings.
 - **Sampling:** width and height (default 9,216 pixels per capture), FPS limit
   (0 follows decoded frames, with a 30 FPS polling fallback), color smoothing,
   frame crossfade, and staged downsampling with an adjustable reduction factor.
-  **High-precision colors**, enabled by default, uses float16 canvases for every
-  downsampling stage and readback, float32 temporal smoothing, and RGBA16F source
-  textures. It retains intermediate shades without making the image brighter.
-  Unsupported canvas/readback or WebGL paths fall back to 8-bit colors. The toggle
+  **Process video on GPU**, enabled by default, imports video into a texture and
+  keeps downsampling, temporal smoothing, blur, and warping on the GPU. It avoids
+  full-frame CPU readback. Auto-dimming reads a small brightness thumbnail
+  asynchronously (default 32 × 32, at most every 100 ms); its size and interval
+  are adjustable. This estimates brightness rather than examining every color-map
+  pixel. Disabling auto-dimming removes that readback too. Unsupported GPU paths
+  automatically use the CPU sampler; turn the GPU toggle off to compare them.
+  **High-precision colors**, enabled by default, uses float16 downsampling and
+  source textures plus float32 smoothing history. The CPU fallback uses float16
+  canvases/readback where supported. This retains intermediate shades without
+  making the image brighter. Unsupported CPU precision falls back to bytes. The toggle
   applies live, including while paused; turning it off reduces memory/bandwidth.
   Crossfades are capped to the observed capture interval; use color smoothing for
   longer blends. Disabling staged downsampling is cheaper but can reintroduce
@@ -64,8 +71,10 @@ support alone does not establish that less dithering is sufficient. If bands are
 reset that individual control to pick up the new default.
 
 `[BLS] Video color precision` reports the active video path when entering video
-mode or changing precision. On a fully supported setup it shows `sampling:
-"float16"`, `smoothingUpload: "float32"`, and `sourceTexture: "rgba16f"`. A fallback
+mode or changing precision. On a fully supported setup it shows `processing:
+"gpu"`, `sampling: "float16"`, `smoothing: "float32"`, `sourceTexture: "rgba16f"`,
+and `fullFrameReadback: false`. The CPU path reports `processing: "cpu"` and
+`smoothingUpload` instead. A fallback
 includes its reason. The source video can still contain banding, and final
 compositing/output precision remains unverified, so dithering stays enabled.
 

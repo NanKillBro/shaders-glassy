@@ -1,6 +1,10 @@
 import type { GradientSettings } from "@/popup/types";
 
 export const CONTROL_HINTS: Partial<Record<keyof GradientSettings, string>> = {
+  videoGpuBrightnessSize:
+    "Width and height of the tiny brightness thumbnail. Larger values improve dimming estimates but cost more to analyze. GPU mode only.",
+  videoGpuBrightnessInterval:
+    "Minimum time between asynchronous brightness checks. Zero checks each captured frame when the previous read is ready. GPU mode only.",
   videoOpacity: "Visibility of the background while sampling the music video.",
   videoWarpIntensity: "Direct warp strength for video. Zero preserves the frame; 1 allows the full abstract warp.",
   videoBlurPasses: "Extra shader blur passes. Zero bypasses the blur passes; sampling can still soften the image.",

@@ -1,5 +1,5 @@
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 3628d50a6f1fe42e12cf12054fd24d99566fbb04..d37f773ecbb983edd31355ceecd67a3644931dd8 100644
+index 3628d50a6f1fe42e12cf12054fd24d99566fbb04..e12bd5a77f6f2455e020768c6d6bd075e5e81cba 100644
 --- a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -12,6 +12,10 @@
@@ -13,7 +13,7 @@ index 3628d50a6f1fe42e12cf12054fd24d99566fbb04..d37f773ecbb983edd31355ceecd67a36
      warpIntensity?: number;
      blurPasses?: number;
      animationSpeed?: number;
-@@ -23,6 +27,13 @@ export interface KawarpOptions {
+@@ -23,6 +27,14 @@ export interface KawarpOptions {
      scale?: number;
  }
  export declare class Kawarp {
@@ -24,20 +24,23 @@ index 3628d50a6f1fe42e12cf12054fd24d99566fbb04..d37f773ecbb983edd31355ceecd67a36
 +    private sourceUploadWidth;
 +    private sourceUploadHeight;
 +    private sourceUploadFloat;
++    private activeSourceTexture;
      private canvas;
      private gl;
      private halfFloatExt;
-@@ -83,7 +94,7 @@ export declare class Kawarp {
+@@ -83,7 +95,9 @@ export declare class Kawarp {
      getOptions(): Required<KawarpOptions>;
      loadImage(src: string): Promise<void>;
      loadImageElement(source: TexImageSource): void;
 -    loadImageData(data: Uint8Array | Uint8ClampedArray, width: number, height: number): void;
 +    loadImageData(data: Uint8Array | Uint8ClampedArray | Float32Array, width: number, height: number): void;
++    /** Consume a caller-owned texture from this canvas's WebGL context. Caller retains ownership. */
++    loadTexture(texture: WebGLTexture, highPrecision?: boolean): void;
      loadFromImageData(imageData: ImageData): void;
      loadBlob(blob: Blob): Promise<void>;
      loadBase64(base64: string): Promise<void>;
 diff --git a/dist/index.js b/dist/index.js
-index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d1dc98b53 100644
+index 4b25a678c124ed2c15639d23e8cfcb596925450f..b00ed3257fd45b9b60e085c96b0d8b408f00236e 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -24,7 +24,7 @@ const VERTEX_SHADER = `
@@ -87,7 +90,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
    uniform float u_saturation;
    uniform float u_dithering;
    uniform float u_time;
-@@ -218,25 +218,41 @@ export class Kawarp {
+@@ -218,25 +218,42 @@ export class Kawarp {
      _dithering;
      _scale;
      hasImage = false;
@@ -99,6 +102,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
 +    sourceUploadWidth = 0;
 +    sourceUploadHeight = 0;
 +    sourceUploadFloat = false;
++    activeSourceTexture = null;
      // Cached attribute locations
      attribs;
      // Cached uniform locations
@@ -133,7 +137,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
          this._warpIntensity = options.warpIntensity ?? 1.0;
          this._blurPasses = options.blurPasses ?? 8;
          this._animationSpeed = options.animationSpeed ?? 1.0;
-@@ -303,6 +319,23 @@ export class Kawarp {
+@@ -303,6 +320,23 @@ export class Kawarp {
          const initW = Math.max(1, canvas.width || 640);
          const initH = Math.max(1, canvas.height || 360);
          this.warpFBO = this.createFramebuffer(initW, initH, true);
@@ -157,7 +161,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
      }
      // Getters and setters
      get warpIntensity() {
-@@ -315,7 +348,7 @@ export class Kawarp {
+@@ -315,7 +349,7 @@ export class Kawarp {
          return this._blurPasses;
      }
      set blurPasses(value) {
@@ -166,7 +170,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
          if (newValue !== this._blurPasses) {
              this._blurPasses = newValue;
              // Re-blur with new pass count if we have an image
-@@ -328,7 +361,7 @@ export class Kawarp {
+@@ -328,7 +362,7 @@ export class Kawarp {
          return this._targetAnimationSpeed;
      }
      set animationSpeed(value) {
@@ -175,7 +179,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
      }
      get transitionDuration() {
          return this._transitionDuration;
-@@ -410,6 +443,7 @@ export class Kawarp {
+@@ -410,6 +444,7 @@ export class Kawarp {
              tintIntensity: this._tintIntensity,
              dithering: this._dithering,
              scale: this._scale,
@@ -183,7 +187,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
          };
      }
      // Image loading methods
-@@ -441,6 +475,8 @@ export class Kawarp {
+@@ -441,6 +476,8 @@ export class Kawarp {
          const gl = this.gl;
          gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
          gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
@@ -192,7 +196,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
          if ("close" in bitmap && typeof bitmap.close === "function") {
              bitmap.close();
-@@ -448,13 +484,45 @@ export class Kawarp {
+@@ -448,13 +485,45 @@ export class Kawarp {
          this.processNewImage();
      }
      loadImageElement(source) {
@@ -240,7 +244,30 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
          this.processNewImage();
      }
      loadFromImageData(imageData) {
-@@ -713,6 +781,12 @@ export class Kawarp {
+@@ -504,7 +573,12 @@ export class Kawarp {
+      * Process a new image: blur it and start transition
+      * This is the key optimization - blur only runs here, not every frame!
+      */
+-    processNewImage() {
++    loadTexture(texture, highPrecision = false) {
++        this.highPrecisionSource = highPrecision;
++        this.processNewImage(texture);
++    }
++    processNewImage(texture = this.sourceTexture) {
++        this.activeSourceTexture = texture;
+         if (!this.hasImage) {
+             this.blurSourceInto(this.nextAlbumFBO);
+             this.blurSourceInto(this.currentAlbumFBO);
+@@ -537,7 +611,7 @@ export class Kawarp {
+         gl.bindFramebuffer(gl.FRAMEBUFFER, this.blurFBO1.framebuffer);
+         gl.viewport(0, 0, BLUR_SIZE, BLUR_SIZE);
+         gl.activeTexture(gl.TEXTURE0);
+-        gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
++        gl.bindTexture(gl.TEXTURE_2D, this.activeSourceTexture || this.sourceTexture);
+         gl.uniform1i(this.uniforms.tint.texture, 0);
+         gl.uniform3fv(this.uniforms.tint.tintColor, this._tintColor);
+         gl.uniform1f(this.uniforms.tint.tintIntensity, this._tintIntensity);
+@@ -713,6 +787,12 @@ export class Kawarp {
      }
      createShader(type, source) {
          const gl = this.gl;
@@ -253,7 +280,7 @@ index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d
          const shader = gl.createShader(type);
          if (!shader)
              throw new Error("Failed to create shader");
-@@ -768,16 +842,22 @@ export class Kawarp {
+@@ -768,16 +848,22 @@ export class Kawarp {
      createFramebuffer(width, height, useHighPrecision = false) {
          const gl = this.gl;
          const texture = this.createTexture();

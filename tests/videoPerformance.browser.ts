@@ -1,10 +1,11 @@
 import Kawarp from "@kawarp/core";
 import { measureHighlightLuminance } from "../contents/lib/artworkBrightness";
+import { GpuVideoProcessor } from "../contents/lib/gpuVideoProcessor";
 import { startVideoFrameSampler } from "../contents/lib/videoFrameSampler";
 
 // Run on an empty visible page. Measures sampler CPU/submission time and the
 // synchronous parts of upload/render, not asynchronous GPU execution or display FPS.
-export async function runVideoPerformanceChecks(iterations = 30) {
+export async function runVideoPerformanceChecks(iterations = 30, gpu = false) {
   const results = [];
   for (const [width, height] of [
     [128, 72],
@@ -38,6 +39,7 @@ export async function runVideoPerformanceChecks(iterations = 30) {
       transitionDuration: 0,
     });
     const gl = (output.getContext("webgl2") ?? output.getContext("webgl"))!;
+    const processor = gpu ? new GpuVideoProcessor(gl as WebGL2RenderingContext, () => {}) : null;
     const rows: { sampling: number; brightness: number; upload: number; render: number }[] = [];
     let started = 0;
     let stop = () => {};
@@ -58,6 +60,7 @@ export async function runVideoPerformanceChecks(iterations = 30) {
               stagedDownsampling: true,
               downsampleFactor: 2,
               highPrecision: true,
+              gpuProcessing: gpu,
             };
           },
           isActive: () => true,
@@ -67,6 +70,29 @@ export async function runVideoPerformanceChecks(iterations = 30) {
             stop();
             reject(new Error("Synthetic source unavailable"));
           },
+          onVideoFrame: processor
+            ? (source, info) => {
+                const frame = processor.process(source, info, { enabled: true, size: 32, intervalMs: 100 });
+                const sampled = performance.now();
+                renderer.loadTexture(frame.texture, frame.highPrecision);
+                const uploaded = performance.now();
+                renderer.renderFrame();
+                const rendered = performance.now();
+                rows.push({
+                  sampling: sampled - started,
+                  brightness: 0,
+                  upload: uploaded - sampled,
+                  render: rendered - uploaded,
+                });
+                video.currentTime += 1 / 30;
+                if (rows.length >= iterations + 5) {
+                  clearTimeout(timeout);
+                  stop();
+                  resolve();
+                }
+                return true;
+              }
+            : undefined,
           onFrame: frame => {
             const sampled = performance.now();
             measureHighlightLuminance(frame.pixels.data);
@@ -99,6 +125,7 @@ export async function runVideoPerformanceChecks(iterations = 30) {
         };
       };
       results.push({
+        processing: gpu ? "gpu" : "cpu",
         width,
         height,
         pixels: width * height,
@@ -107,9 +134,13 @@ export async function runVideoPerformanceChecks(iterations = 30) {
         upload: timing("upload"),
         render: timing("render"),
         floatSource: renderer.highPrecisionSource,
+        totalMean:
+          steady.reduce((total, row) => total + row.sampling + row.brightness + row.upload + row.render, 0) /
+          steady.length,
       });
     } finally {
       stop();
+      processor?.dispose();
       renderer.dispose();
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     }

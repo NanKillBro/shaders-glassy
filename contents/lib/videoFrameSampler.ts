@@ -25,9 +25,18 @@ export const smoothVideoPixels = (
   return previous;
 };
 
+export interface VideoFrameInfo {
+  id: number;
+  settings: VideoSamplingSettings;
+  intervalMs: number;
+  elapsedMs: number;
+  resetHistory: boolean;
+}
+
 export interface VideoFrameSample {
   // Float data uses normalized SDR-range sRGB (0..1); bytes use 0..255.
   pixels: { data: Uint8ClampedArray | Float32Array; width: number; height: number };
+  id?: number;
   samplingPrecision: "float16" | "unorm8";
   highPrecisionRequested: boolean;
   fallbackReason?: string;
@@ -42,6 +51,7 @@ export interface VideoSamplingSettings {
   stagedDownsampling: boolean;
   downsampleFactor: number;
   highPrecision?: boolean;
+  gpuProcessing?: boolean;
 }
 
 const defaults: VideoSamplingSettings = {
@@ -52,6 +62,7 @@ const defaults: VideoSamplingSettings = {
   stagedDownsampling: true,
   downsampleFactor: 2,
   highPrecision: true,
+  gpuProcessing: true,
 };
 const bounded = (value: number, fallback: number, min: number, max: number) =>
   Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
@@ -60,6 +71,8 @@ interface SamplerOptions {
   getSettings?: () => VideoSamplingSettings;
   getVideo: () => HTMLVideoElement | null;
   isActive: () => boolean;
+  // Return true when every active consumer handled this frame without CPU pixels.
+  onVideoFrame?: (video: HTMLVideoElement, info: VideoFrameInfo) => boolean;
   onFrame: (frame: VideoFrameSample) => void;
   onUnavailable: () => void;
 }
@@ -75,6 +88,7 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
       stagedDownsampling: input.stagedDownsampling !== false,
       downsampleFactor: bounded(input.downsampleFactor, 2, 1.25, 4),
       highPrecision: input.highPrecision !== false,
+      gpuProcessing: input.gpuProcessing !== false,
     };
   };
   let settings = readSettings();
@@ -87,6 +101,8 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
   let source = "";
   let mediaTime = -1;
   let frame: VideoFrameSample | null = null;
+  let videoFrame: VideoFrameInfo | null = null;
+  let frameSequence = 0;
   let blocked = false;
   let callbackId: number | null = null;
   let stopped = false;
@@ -140,6 +156,7 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
     canvas = surface.canvas;
     context = surface.context;
     frame = null;
+    videoFrame = null;
     colorHistory = null;
     sourceWidth = sourceHeight = 0;
     downsampleStages = [];
@@ -244,7 +261,9 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
       nextSettings.height !== settings.height ||
       nextSettings.stagedDownsampling !== settings.stagedDownsampling ||
       nextSettings.downsampleFactor !== settings.downsampleFactor ||
-      nextSettings.highPrecision !== settings.highPrecision;
+      nextSettings.highPrecision !== settings.highPrecision ||
+      nextSettings.gpuProcessing !== settings.gpuProcessing ||
+      nextSettings.responseMs !== settings.responseMs;
     if (nextSettings.highPrecision !== settings.highPrecision) {
       floatUnavailable = false;
       fallbackReason = undefined;
@@ -267,6 +286,7 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
       source = nextSource;
       mediaTime = -1;
       frame = null;
+      videoFrame = null;
       blocked = false;
       colorHistory = null;
       sourceWidth = 0;
@@ -292,22 +312,40 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
     // Retain the last colors during seeking/buffering instead of flashing artwork.
     if (video.readyState < 2 || video.seeking) return;
 
-    if (!frame || newFrame || ((!supportsFrameCallback || video.paused) && video.currentTime !== mediaTime)) {
-      const now = performance.now();
-      const jumped =
-        Math.abs(video.currentTime - mediaTime) >
-        Math.max(0.25, settings.frameRate > 0 ? 2 / settings.frameRate : 0.25);
-      if (
-        frame &&
-        !video.paused &&
-        !jumped &&
-        settings.frameRate > 0 &&
-        now - lastSampleTime < 1000 / settings.frameRate - 0.5
-      ) {
-        options.onFrame(frame);
-        return;
-      }
+    const now = performance.now();
+    const jumped =
+      Math.abs(video.currentTime - mediaTime) > Math.max(0.25, settings.frameRate > 0 ? 2 / settings.frameRate : 0.25);
+    const fresh =
+      (!frame && !videoFrame) ||
+      newFrame ||
+      ((!supportsFrameCallback || video.paused) && video.currentTime !== mediaTime);
+    const throttled =
+      (frame || videoFrame) &&
+      !video.paused &&
+      !jumped &&
+      settings.frameRate > 0 &&
+      now - lastSampleTime < 1000 / settings.frameRate - 0.5;
+    if (fresh && !throttled) {
+      videoFrame = {
+        id: ++frameSequence,
+        settings,
+        elapsedMs: now - lastSampleTime,
+        intervalMs: frame || videoFrame ? now - lastSampleTime : FRAME_INTERVAL_MS,
+        resetHistory: (!frame && !videoFrame) || !!video.paused || jumped,
+      };
+      lastSampleTime = now;
+      mediaTime = video.currentTime;
+    }
+    if (!videoFrame) return;
+    // Cached metadata also lets a newly mounted renderer consume a paused frame.
+    if (settings.gpuProcessing && options.onVideoFrame?.(video, videoFrame)) {
+      frame = null;
+      colorHistory = null;
+      return;
+    }
+    if (frame?.id !== videoFrame.id) {
       try {
+        const info = videoFrame;
         let pixels;
         try {
           pixels = capturePixels(video);
@@ -316,27 +354,25 @@ export const startVideoFrameSampler = (options: SamplerOptions): (() => void) =>
           floatUnavailable = true;
           fallbackReason = error.message;
           resetSurface();
+          videoFrame = info;
           if (!context) throw error;
           pixels = capturePixels(video);
         }
-        // A seek/track change should immediately reflect its destination frame.
-        if (!frame || video.paused || jumped) colorHistory = null;
-        colorHistory = smoothVideoPixels(pixels.data, colorHistory, now - lastSampleTime, settings.responseMs);
-        const intervalMs = frame ? now - lastSampleTime : FRAME_INTERVAL_MS;
-        lastSampleTime = now;
+        if (info.resetHistory) colorHistory = null;
+        colorHistory = smoothVideoPixels(pixels.data, colorHistory, info.elapsedMs, settings.responseMs);
         frame = {
+          id: info.id,
           pixels,
-          intervalMs,
+          intervalMs: info.intervalMs,
           samplingPrecision: floatSampling ? "float16" : "unorm8",
           highPrecisionRequested: settings.highPrecision !== false,
           fallbackReason,
         };
-        mediaTime = video.currentTime;
       } catch (error) {
-        // Do not keep attempting readback of a CORS/DRM-protected source.
         blocked = error instanceof DOMException && error.name === "SecurityError";
         cancelFrameCallback();
         frame = null;
+        videoFrame = null;
         options.onUnavailable();
         return;
       }

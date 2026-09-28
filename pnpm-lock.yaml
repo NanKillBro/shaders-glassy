@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@kawarp/core@1.2.2':
-    hash: af6f739fea7d7a21690e74b362f34ee51595c8f215ef16506b3f013fc859359f
+    hash: 26641322d882e0b7f46db1b6cecb1fac71d27a92d996ca1530fb8eb40fdf6d74
     path: patches/@kawarp__core@1.2.2.patch
 
 importers:
@@ -18,7 +18,7 @@ importers:
         version: 0.27.20(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
       '@kawarp/core':
         specifier: ^1.2.1
-        version: 1.2.2(patch_hash=af6f739fea7d7a21690e74b362f34ee51595c8f215ef16506b3f013fc859359f)
+        version: 1.2.2(patch_hash=26641322d882e0b7f46db1b6cecb1fac71d27a92d996ca1530fb8eb40fdf6d74)
       '@plasmohq/storage':
         specifier: ^1.9.0
         version: 1.15.0(react@18.2.0)
@@ -3638,7 +3638,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@kawarp/core@1.2.2(patch_hash=af6f739fea7d7a21690e74b362f34ee51595c8f215ef16506b3f013fc859359f)': {}
+  '@kawarp/core@1.2.2(patch_hash=26641322d882e0b7f46db1b6cecb1fac71d27a92d996ca1530fb8eb40fdf6d74)': {}
 
   '@lezer/common@0.15.12': {}
 

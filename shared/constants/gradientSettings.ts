@@ -33,6 +33,9 @@ export interface GradientSettings {
   videoFrameTransition: number;
   videoStagedDownsampling: boolean;
   videoHighPrecisionSampling: boolean;
+  videoGpuProcessing: boolean;
+  videoGpuBrightnessSize: number;
+  videoGpuBrightnessInterval: number;
   videoDownsampleFactor: number;
   // Bright artwork
   autoDimBrightArtwork: boolean;
@@ -90,6 +93,9 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoFrameTransition: 8,
   videoStagedDownsampling: true,
   videoHighPrecisionSampling: true,
+  videoGpuProcessing: true,
+  videoGpuBrightnessSize: 32,
+  videoGpuBrightnessInterval: 100,
   videoDownsampleFactor: 2,
   // Bright artwork
   autoDimBrightArtwork: true,
