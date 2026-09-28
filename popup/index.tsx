@@ -60,7 +60,7 @@ const Popup: React.FC = () => {
 
   const panels: Record<SettingsTab, React.ReactNode> = {
     general: <GeneralTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
-    look: <LookTab {...sliderProps} />,
+    look: <LookTab {...sliderProps} onToggleChange={handleToggleChange} />,
     motion: <MotionTab {...sliderProps} />,
     audio: <AudioTab {...sliderProps} onToggleChange={handleToggleChange} />,
     extras: <ExtrasTab settings={gradientSettings} onToggleChange={handleToggleChange} />,

@@ -27,18 +27,17 @@ jobs:
           ref: v${{ inputs.version }}
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
+          node-version: "22.x"
+          cache: pnpm
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Detect release type
         id: meta
@@ -93,8 +92,8 @@ jobs:
         run: |
           rm -rf "${{ steps.paths.outputs.build_dir }}"
           case "${{ inputs.platform }}" in
-            chrome) bun run build ;;
-            firefox) bun run build:firefox ;;
+            chrome) pnpm build ;;
+            firefox) pnpm build:firefox ;;
           esac
 
       - name: Publish to Chrome Web Store
@@ -107,7 +106,7 @@ jobs:
           REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
         run: |
           cd build/chrome-mv3-prod && zip -r "../chrome-v${{ inputs.version }}.zip" . && cd -
-          bun tooling/publish-chrome.ts "build/chrome-v${{ inputs.version }}.zip"
+          node tooling/publish-chrome.ts "build/chrome-v${{ inputs.version }}.zip"
 
       - name: Install web-ext
         if: inputs.platform == 'firefox'

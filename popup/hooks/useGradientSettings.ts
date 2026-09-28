@@ -151,6 +151,7 @@ export const useGradientSettings = () => {
               "enabled",
               "pauseOnInactive",
               "enableAnimatedArt",
+              "autoDimBrightArtwork",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {

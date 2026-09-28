@@ -45,6 +45,10 @@ export const getControlConfig = (key: string): ControlConfig => {
     min = 0;
     max = 2;
     step = 0.01;
+  } else if (key === "autoDimStrength") {
+    min = 0;
+    max = 1;
+    step = 0.01;
   } else if (key === "kawarpDithering") {
     min = 0;
     max = 0.05;

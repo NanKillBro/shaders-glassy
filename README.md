@@ -42,13 +42,13 @@ Use the download links above to install from Chrome Web Store or Firefox Add-ons
 2. Install dependencies
 
    ```bash
-   bun install
+   pnpm install
    ```
 
 3. Build the extension
 
    ```bash
-   bun run build
+   pnpm build
    ```
 
 4. Load in your browser
@@ -60,9 +60,9 @@ Use the download links above to install from Chrome Web Store or Firefox Add-ons
 For development with hot reload:
 
 ```bash
-bun run dev          # Chrome
-bun run dev:firefox  # Firefox
-bun run dev:edge     # Edge
+pnpm dev          # Chrome
+pnpm dev:firefox  # Firefox
+pnpm dev:edge     # Edge
 ```
 
 ## Usage
@@ -114,8 +114,8 @@ Settings can be exported to JSON and imported on other devices or browsers.
 ## Building for Production
 
 ```bash
-bun run build    # Build for all browsers (Chrome, Firefox, Edge)
-bun run package  # Package for distribution
+pnpm build    # Build for all browsers (Chrome, Firefox, Edge)
+pnpm package  # Package for distribution
 ```
 
 Build outputs:

@@ -6,7 +6,7 @@ const packageJsonPath = join(rootDir, "package.json");
 
 const inputVersion = process.argv[2];
 if (!inputVersion) {
-  console.error("Usage: bun tooling/update-version.ts <version>");
+  console.error("Usage: node tooling/update-version.ts <version>");
   process.exit(1);
 }
 
