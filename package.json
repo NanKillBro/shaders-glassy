@@ -4,6 +4,7 @@
   "version": "1.2.2",
   "description": "Add beautiful gradient effects to YouTube Music",
   "author": "Boidu",
+  "packageManager": "pnpm@10.26.2",
   "scripts": {
     "dev": "plasmo dev --verbose",
     "dev:firefox": "plasmo dev --target=firefox-mv2 --verbose",
@@ -16,7 +17,7 @@
     "package:edge": "plasmo package --target=edge-mv3",
     "lint:fix": "biome lint --write && biome format --write",
     "typecheck": "tsc --noEmit",
-    "pack": "bun run lint:fix && bun run typecheck && bun run build && bun run package"
+    "pack": "pnpm lint:fix && pnpm typecheck && pnpm build && pnpm package"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",
