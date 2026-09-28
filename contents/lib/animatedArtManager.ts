@@ -397,7 +397,7 @@ async function tryFetchArtwork(): Promise<void> {
 
   const { videoId, song, artist, duration } = currentPlayerData;
 
-  if (videoId === lastProcessedVideoId) return;
+  if (!song || videoId === lastProcessedVideoId) return;
 
   lastProcessedVideoId = videoId;
 
