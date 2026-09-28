@@ -114,6 +114,7 @@ window.addEventListener("message", event => {
     }
     case "bls-audio-beat": {
       const bounded = clampBeatMultipliers(message, state.authorizedSettings);
+      reusableMultipliers.isBeat = bounded.isBeat;
       reusableMultipliers.speedMultiplier = bounded.speedMultiplier;
       reusableMultipliers.scaleMultiplier = bounded.scaleMultiplier;
       state.onBeatDetected?.(reusableMultipliers);

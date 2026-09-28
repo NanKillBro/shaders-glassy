@@ -11,7 +11,7 @@ const { startVideoFrameSampler, smoothVideoPixels, FRAME_INTERVAL_MS } = await i
   `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`
 );
 
-function setup(t) {
+function setup(t, samplingSettings, support = {}) {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
   const state = {
@@ -24,13 +24,22 @@ function setup(t) {
     error: null,
     stopped: false,
     tick: null,
+    interval: null,
+    now: 1000,
     reductions: [],
+    surfaces: [],
+    floatReads: 0,
+    floatValues: [0.50048828125, 0.25, 0.125, 1],
   };
   const createCanvas = () => ({
     width: 0,
     height: 0,
-    getContext: () => ({
-      setTransform: (...values) => assert.deepEqual(values, [1, 0, 0, -1, 0, 72]),
+    getContext: (_type, attributes) => {
+      state.surfaces.push(attributes);
+      return {
+      getContextAttributes: () => ({ colorType: support.floatCanvas &&
+        (attributes.willReadFrequently || support.floatStages !== false) ? attributes.colorType : "unorm8" }),
+      setTransform: (...values) => assert.deepEqual(values, [1, 0, 0, -1, 0, samplingSettings?.height ?? 72]),
       drawImage: (input, _x, _y, width, height) => {
         state.reductions.push({
           from: [input.videoWidth ?? input.width, input.videoHeight ?? input.height],
@@ -38,17 +47,23 @@ function setup(t) {
         });
         state.draws++;
       },
-      getImageData: () => {
+      getImageData: (_x, _y, width, height, options) => {
         state.reads++;
         if (state.error) throw state.error;
-        return { data: new Uint8ClampedArray([state.video.currentTime, 0, 0, 255]), width: 128, height: 72 };
+        if (options?.pixelFormat === "rgba-float16") {
+          state.floatReads++;
+          if (support.floatReadback === false) throw new TypeError("Unsupported pixel format");
+          return {data: Object.assign([...state.floatValues], {BYTES_PER_ELEMENT: 2}), pixelFormat: "rgba-float16", width, height};
+        }
+        return { data: new Uint8ClampedArray([state.video.currentTime, 0, 0, 255]), width, height };
       },
-    }),
+    };
+    },
   });
   globalThis.document = { createElement: createCanvas };
   globalThis.window = {
     setInterval: (callback, interval) => {
-      assert.equal(interval, FRAME_INTERVAL_MS);
+      state.interval = interval;
       state.tick = callback;
       return 42;
     },
@@ -57,7 +72,9 @@ function setup(t) {
       state.stopped = true;
     },
   };
+  t.mock.method(performance, "now", () => state.now);
   const stop = startVideoFrameSampler({
+    getSettings: samplingSettings ? () => samplingSettings : undefined,
     getVideo: () => state.video,
     isActive: () => state.active,
     onFrame: frame => state.frames.push(frame),
@@ -207,4 +224,139 @@ test("temporal response depends on elapsed time and resets without carrying old 
   assert.ok(Math.abs(oneStep[0] - twoSteps[0]) < 0.001);
   const firstFrame = target();
   assert.deepEqual(Array.from(smoothVideoPixels(firstFrame, null, 0)), Array.from(firstFrame));
+});
+
+const samplingDefaults = () => ({ width: 128, height: 72, frameRate: 0, responseMs: 65, stagedDownsampling: true, downsampleFactor: 2 });
+
+test("resizes a paused frame live and rebuilds the downsampling chain", t => {
+  const settings = samplingDefaults();
+  const { state } = setup(t, settings);
+  state.video.paused = true;
+  state.tick();
+  const previous = state.frames.at(-1);
+  settings.width = 256;
+  settings.height = 144;
+  state.tick();
+  assert.equal(state.reads, 2);
+  assert.notEqual(state.frames.at(-1), previous);
+  assert.equal(state.frames.at(-1).pixels.width, 256);
+  assert.equal(state.frames.at(-1).pixels.height, 144);
+  assert.deepEqual(state.reductions.at(-1).to, [256, 144]);
+});
+
+test("capture limit throttles readback and changes the polling rate live", t => {
+  const settings = { ...samplingDefaults(), frameRate: 10 };
+  const { state } = setup(t, settings);
+  state.tick();
+  assert.equal(state.interval, 100);
+  state.now += 50;
+  state.video.currentTime = 0.05;
+  state.tick();
+  assert.equal(state.reads, 1);
+  state.now += 50;
+  state.video.currentTime = 0.1;
+  state.tick();
+  assert.equal(state.reads, 2);
+  settings.frameRate = 20;
+  state.now += 50;
+  state.video.currentTime = 0.15;
+  state.tick();
+  assert.equal(state.interval, 50);
+  assert.equal(state.reads, 3);
+  // Seeking while paused bypasses the frame cap.
+  state.video.paused = true;
+  state.video.currentTime = 4;
+  state.tick();
+  assert.equal(state.reads, 4);
+});
+
+test("downsampling can be bypassed or use a different reduction factor", t => {
+  const settings = samplingDefaults();
+  const { state } = setup(t, settings);
+  state.tick();
+  const careful = state.draws;
+  settings.stagedDownsampling = false;
+  state.tick();
+  assert.equal(state.draws - careful, 1);
+  settings.stagedDownsampling = true;
+  settings.downsampleFactor = 4;
+  state.reductions = [];
+  state.tick();
+  assert.deepEqual(state.reductions.map(r => r.to), [[480, 270], [128, 72]]);
+});
+
+test("color response is configurable and zero disables temporal blending", () => {
+  const dark = new Float32Array([0, 0, 0, 255]);
+  const instant = new Uint8ClampedArray([200, 100, 40, 255]);
+  smoothVideoPixels(instant, dark, 16, 0);
+  assert.deepEqual([...instant], [200, 100, 40, 255]);
+  const fast = new Uint8ClampedArray([200, 100, 40, 255]);
+  const slow = new Uint8ClampedArray(fast);
+  smoothVideoPixels(fast, new Float32Array(dark), 16, 20);
+  smoothVideoPixels(slow, new Float32Array(dark), 16, 200);
+  assert.ok(fast[0] > slow[0]);
+});
+
+
+test("float canvases retain sub-byte colors through every resize and smoothing", t => {
+  const { state } = setup(t, samplingDefaults(), { floatCanvas: true });
+  state.tick();
+  const first = state.frames.at(-1);
+  assert.equal(first.samplingPrecision, "float16");
+  assert.ok(first.pixels.data instanceof Float32Array);
+  assert.equal(first.pixels.data[0], 0.50048828125);
+  assert.ok(state.surfaces.every(surface => surface.colorType === "float16"));
+  state.now += 16;
+  state.video.currentTime += 0.016;
+  state.floatValues[0] = 0.501953125;
+  state.tick();
+  const next = state.frames.at(-1).pixels.data;
+  assert.ok(next[0] > first.pixels.data[0] && next[0] < state.floatValues[0]);
+  assert.notEqual(next[0], Math.round(next[0] * 255) / 255);
+  assert.equal(next[3], 1);
+  assert.equal(first.pixels.data[0], 0.50048828125, "cached frame must not mutate with history");
+});
+
+test("precision can be toggled live while paused without mixing normalized and byte histories", t => {
+  const settings = {...samplingDefaults(), highPrecision: true};
+  const { state } = setup(t, settings, { floatCanvas: true });
+  state.video.paused = true;
+  state.tick();
+  assert.equal(state.frames.at(-1).samplingPrecision, "float16");
+  settings.highPrecision = false;
+  state.tick();
+  assert.equal(state.frames.at(-1).samplingPrecision, "unorm8");
+  assert.ok(state.frames.at(-1).pixels.data instanceof Uint8ClampedArray);
+  settings.highPrecision = true;
+  state.tick();
+  assert.equal(state.frames.at(-1).pixels.data[0], state.floatValues[0]);
+  assert.equal(state.frames.at(-1).pixels.data[3], 1);
+});
+
+test("unsupported float readback falls back once and continues sampling", t => {
+  const { state } = setup(t, samplingDefaults(), {floatCanvas: true, floatReadback: false});
+  state.tick();
+  assert.equal(state.frames.at(-1).samplingPrecision, "unorm8");
+  assert.match(state.frames.at(-1).fallbackReason, /readback/);
+  state.video.currentTime += 1;
+  state.tick();
+  assert.equal(state.floatReads, 1);
+  assert.equal(state.unavailable, 0);
+});
+
+test("unsupported float stage falls back the entire downsampling chain", t => {
+  const { state } = setup(t, samplingDefaults(), {floatCanvas: true, floatStages: false});
+  state.tick();
+  assert.equal(state.frames.at(-1).samplingPrecision, "unorm8");
+  assert.match(state.frames.at(-1).fallbackReason, /backing store/);
+  assert.equal(state.floatReads, 0);
+  assert.equal(state.unavailable, 0);
+});
+
+test("protected float sources are blocked without retrying in byte mode", t => {
+  const { state } = setup(t, samplingDefaults(), {floatCanvas: true});
+  state.error = new DOMException("Protected source", "SecurityError");
+  state.tick(); state.tick();
+  assert.equal(state.reads, 1);
+  assert.equal(state.frames.length, 0);
 });

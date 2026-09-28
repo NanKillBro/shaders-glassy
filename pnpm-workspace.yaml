@@ -1,8 +1,11 @@
 allowBuilds:
-  "@biomejs/biome": true
-  "@parcel/watcher": true
-  "@swc/core": true
+  '@biomejs/biome': true
+  '@parcel/watcher': true
+  '@swc/core': true
   esbuild: true
   lmdb: true
   msgpackr-extract: true
   sharp: true
+
+patchedDependencies:
+  '@kawarp/core@1.2.2': patches/@kawarp__core@1.2.2.patch

@@ -220,6 +220,7 @@ const analyzeAudioFrame = (timestamp: number): void => {
 
     postAudioMessage({
       type: "bls-audio-beat",
+      isBeat: settings.audioResponsive && isBeat,
       speedMultiplier: settings.audioResponsive && isBeat ? settings.audioSpeedMultiplier : 1,
       scaleMultiplier: settings.audioResponsive && isBeat ? 1 + scaleBoost / 100 : 1,
     });

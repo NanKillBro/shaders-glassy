@@ -1,5 +1,5 @@
-import React from "react";
 import { SETTINGS_TABS, SettingsTab } from "@/popup/types";
+import React from "react";
 
 interface TabBarProps {
   activeTab: SettingsTab;
@@ -10,6 +10,7 @@ const TAB_LABELS: Record<SettingsTab, string> = {
   general: "General",
   look: "Look",
   motion: "Motion",
+  video: "Video",
   audio: "Audio",
   extras: "Extras",
 };

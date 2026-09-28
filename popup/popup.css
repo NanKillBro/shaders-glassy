@@ -804,3 +804,14 @@ body {
     animation: none !important;
   }
 }
+
+.video-section {
+  margin: 20px 0 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

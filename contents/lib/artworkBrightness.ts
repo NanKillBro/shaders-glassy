@@ -3,19 +3,64 @@ import { logger } from "@/shared/utils/logger";
 const SAMPLE_SIZE = 32;
 const HIGHLIGHT_PERCENTILE = 0.9;
 const MAX_TARGET_REDUCTION = 0.8;
+let luminanceScratch = new Float32Array(0);
 
-export const measureHighlightLuminance = (rgbaPixels: Uint8ClampedArray): number => {
+// Select the exact percentile without sorting every pixel. Three-way partitioning
+// handles flat video regions cheaply; a bounded work budget prevents quadratic
+// behavior on adversarial ordering. The remaining slice is sorted only on bailout.
+const selectLuminance = (values: Float32Array, count: number, rank: number): number => {
+  let left = 0;
+  let right = count - 1;
+  let workBudget = count * 8;
+  while (left < right) {
+    workBudget -= right - left + 1;
+    if (workBudget < 0) {
+      values.subarray(left, right + 1).sort();
+      return values[rank];
+    }
+    const a = values[left];
+    const b = values[(left + right) >>> 1];
+    const c = values[right];
+    const pivot = Math.max(Math.min(a, b), Math.min(Math.max(a, b), c));
+    let lower = left;
+    let upper = right;
+    let cursor = left;
+    while (cursor <= upper) {
+      const value = values[cursor];
+      if (value < pivot) {
+        values[cursor++] = values[lower];
+        values[lower++] = value;
+      } else if (value > pivot) {
+        values[cursor] = values[upper];
+        values[upper--] = value;
+      } else {
+        cursor++;
+      }
+    }
+    if (rank < lower) right = lower - 1;
+    else if (rank > upper) left = upper + 1;
+    else return values[rank];
+  }
+  return values[rank];
+};
+
+export const measureHighlightLuminance = (rgbaPixels: Uint8ClampedArray | Float32Array): number => {
   const pixelCount = rgbaPixels.length / 4;
   if (pixelCount === 0) return 0;
 
-  const luminances = new Float32Array(pixelCount);
+  if (luminanceScratch.length < pixelCount) luminanceScratch = new Float32Array(pixelCount);
+  const luminances = luminanceScratch;
+  const divisor = rgbaPixels instanceof Float32Array ? 1 : 255;
   for (let pixel = 0; pixel < pixelCount; pixel++) {
     const offset = pixel * 4;
     luminances[pixel] =
-      (0.2126 * rgbaPixels[offset] + 0.7152 * rgbaPixels[offset + 1] + 0.0722 * rgbaPixels[offset + 2]) / 255;
+      (0.2126 * rgbaPixels[offset] + 0.7152 * rgbaPixels[offset + 1] + 0.0722 * rgbaPixels[offset + 2]) / divisor;
   }
-  luminances.sort();
-  return luminances[Math.min(pixelCount - 1, Math.floor(pixelCount * HIGHLIGHT_PERCENTILE))];
+  return selectLuminance(
+    luminances,
+    pixelCount,
+    Math.min(pixelCount - 1, Math.floor(pixelCount * HIGHLIGHT_PERCENTILE))
+  );
 };
 
 export const brightnessForHighlight = (highlightLuminance: number, dimStrength: number): number => {

@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  '@kawarp/core@1.2.2':
+    hash: af6f739fea7d7a21690e74b362f34ee51595c8f215ef16506b3f013fc859359f
+    path: patches/@kawarp__core@1.2.2.patch
+
 importers:
 
   .:
@@ -13,7 +18,7 @@ importers:
         version: 0.27.20(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
       '@kawarp/core':
         specifier: ^1.2.1
-        version: 1.2.2
+        version: 1.2.2(patch_hash=af6f739fea7d7a21690e74b362f34ee51595c8f215ef16506b3f013fc859359f)
       '@plasmohq/storage':
         specifier: ^1.9.0
         version: 1.15.0(react@18.2.0)
@@ -3633,7 +3638,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@kawarp/core@1.2.2': {}
+  '@kawarp/core@1.2.2(patch_hash=af6f739fea7d7a21690e74b362f34ee51595c8f215ef16506b3f013fc859359f)': {}
 
   '@lezer/common@0.15.12': {}
 

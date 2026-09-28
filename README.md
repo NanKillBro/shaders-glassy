@@ -17,13 +17,57 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
-- **Video Ambient Colors**: During music videos, colors follow decoded frames using a 128 × 72 sample, staged downsampling, brief temporal smoothing, and three blur passes to reduce shimmer. Colors retain their top/bottom and left/right orientation with gentler, bounded warping and beat-driven zoom. Audio-only or unreadable sources fall back to album artwork and your usual effect settings.
+- **Video Ambient Colors**: During music videos, colors follow decoded frames with independent controls in the **Video** tab. Defaults use a 128 × 72 sample, staged downsampling, brief temporal smoothing, three blur passes, and 0.5 warp intensity. Warp can range from zero to full strength while retaining beat-driven zoom. Audio-only or unreadable sources fall back to album artwork and your usual effect settings.
+- **High-precision Output**: On HDR displays, supported browsers use a 16-bit floating-point WebGL2 canvas with the configured dithering retained by default (adjustable for video). Brightness stays in the normal range. Other setups retain standard output and dithering.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
 - **Real-time Configuration**: Adjust settings and see changes instantly via the popup
 - **Persistent Settings**: Configuration saved automatically across sessions
 - **Multi-page Support**: Works on player pages, homepage, and search results
 - **Cross-browser**: Supports Chrome, Firefox, Edge, Brave, Arc, and other Chromium browsers
+
+## Video controls
+
+The **Video** tab changes only the music-video background; **Look** and **Motion**
+continue to configure album artwork. Controls are saved, exported, imported, and
+reset with the other settings.
+
+- **Appearance:** opacity, direct warp strength, blur passes (0 bypasses shader
+  blur), saturation, dithering, and the fraction of dithering retained on an HDR
+  display with a working 16-bit canvas. Bright-frame dimming has its own strength
+  and response time.
+- **Motion:** animation speed, beat response, beat speed multiplier, zoom amount,
+  and zoom attack/release. The shared detector must be enabled in **Audio**;
+  video boost amounts are independent of artwork boost amounts.
+- **Sampling:** width and height (default 9,216 pixels per capture), FPS limit
+  (0 follows decoded frames, with a 30 FPS polling fallback), color smoothing,
+  frame crossfade, and staged downsampling with an adjustable reduction factor.
+  **High-precision colors**, enabled by default, uses float16 canvases for every
+  downsampling stage and readback, float32 temporal smoothing, and RGBA16F source
+  textures. It retains intermediate shades without making the image brighter.
+  Unsupported canvas/readback or WebGL paths fall back to 8-bit colors. The toggle
+  applies live, including while paused; turning it off reduces memory/bandwidth.
+  Crossfades are capped to the observed capture interval; use color smoothing for
+  longer blends. Disabling staged downsampling is cheaper but can reintroduce
+  shimmer. Sampling settings also update while paused.
+
+Each canvas logs `[BLS] Canvas HDR/precision detection` to the page console when
+created and when the display's dynamic-range capability changes, even with
+verbose logging disabled. `hdrDisplayDetected` reports the display query;
+`float16DrawingBuffer` reports successful high-precision canvas output;
+`hdrPrecisionActive` requires both. `extendedRangeOutput` remains false: this
+improves blending precision within SDR-range sRGB, not brightness above white.
+`compositorPrecisionVerified` is false because this detection cannot verify the
+precision of browser compositing, OS output, or the monitor. Float16 canvas
+support alone does not establish that less dithering is sufficient. If bands are visible, keep **HDR dither amount** at
+100% and start with **Dithering** at 0.008. Existing saved values are preserved;
+reset that individual control to pick up the new default.
+
+`[BLS] Video color precision` reports the active video path when entering video
+mode or changing precision. On a fully supported setup it shows `sampling:
+"float16"`, `smoothingUpload: "float32"`, and `sourceTexture: "rgba16f"`. A fallback
+includes its reason. The source video can still contain banding, and final
+compositing/output precision remains unverified, so dithering stays enabled.
 
 ## Installation
 

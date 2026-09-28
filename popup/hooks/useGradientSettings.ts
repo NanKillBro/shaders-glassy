@@ -1,11 +1,11 @@
-import { Storage } from "@plasmohq/storage";
-import { useStorage } from "@plasmohq/storage/hook";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DEFAULT_GRADIENT_SETTINGS,
   GRADIENT_SETTINGS_STORAGE_KEY,
   type GradientSettings,
 } from "@/shared/constants/gradientSettings";
+import { Storage } from "@plasmohq/storage";
+import { useStorage } from "@plasmohq/storage/hook";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const storage = new Storage();
 
@@ -152,6 +152,11 @@ export const useGradientSettings = () => {
               "pauseOnInactive",
               "enableAnimatedArt",
               "autoDimBrightArtwork",
+              "videoEnabled",
+              "videoAutoDim",
+              "videoAudioResponsive",
+              "videoStagedDownsampling",
+              "videoHighPrecisionSampling",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {

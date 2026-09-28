@@ -1,0 +1,281 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 3628d50a6f1fe42e12cf12054fd24d99566fbb04..d37f773ecbb983edd31355ceecd67a3644931dd8 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -12,6 +12,10 @@
+  * - Robust CORS and blob/imageBitmap loading
+  */
+ export interface KawarpOptions {
++    /** Request WebGL2 with a float16 drawing buffer, falling back when unsupported. Creation only. */
++    highPrecision?: boolean;
++    /** Prefer WebGL2 for floating-point source textures, independently of output precision. */
++    highPrecisionInput?: boolean;
+     warpIntensity?: number;
+     blurPasses?: number;
+     animationSpeed?: number;
+@@ -23,6 +27,13 @@ export interface KawarpOptions {
+     scale?: number;
+ }
+ export declare class Kawarp {
++    readonly highPrecisionOutput: boolean;
++    /** Whether the last source upload retained floating-point precision. */
++    readonly highPrecisionSource: boolean;
++    private floatSourceUnavailable;
++    private sourceUploadWidth;
++    private sourceUploadHeight;
++    private sourceUploadFloat;
+     private canvas;
+     private gl;
+     private halfFloatExt;
+@@ -83,7 +94,7 @@ export declare class Kawarp {
+     getOptions(): Required<KawarpOptions>;
+     loadImage(src: string): Promise<void>;
+     loadImageElement(source: TexImageSource): void;
+-    loadImageData(data: Uint8Array | Uint8ClampedArray, width: number, height: number): void;
++    loadImageData(data: Uint8Array | Uint8ClampedArray | Float32Array, width: number, height: number): void;
+     loadFromImageData(imageData: ImageData): void;
+     loadBlob(blob: Blob): Promise<void>;
+     loadBase64(base64: string): Promise<void>;
+diff --git a/dist/index.js b/dist/index.js
+index 4b25a678c124ed2c15639d23e8cfcb596925450f..710b3481598d1eaf337dbb725bb0e23d1dc98b53 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -24,7 +24,7 @@ const VERTEX_SHADER = `
+ `;
+ const KAWASE_BLUR_SHADER = `
+   precision highp float;
+-  uniform sampler2D u_texture;
++  uniform highp sampler2D u_texture;
+   uniform vec2 u_resolution;
+   uniform float u_offset;
+   varying vec2 v_texCoord;
+@@ -44,8 +44,8 @@ const KAWASE_BLUR_SHADER = `
+ // Blend shader for crossfading between two textures
+ const BLEND_SHADER = `
+   precision highp float;
+-  uniform sampler2D u_texture1;
+-  uniform sampler2D u_texture2;
++  uniform highp sampler2D u_texture1;
++  uniform highp sampler2D u_texture2;
+   uniform float u_blend;
+   varying vec2 v_texCoord;
+ 
+@@ -58,7 +58,7 @@ const BLEND_SHADER = `
+ // Tint shader - applies color to dark areas before blur
+ const TINT_SHADER = `
+   precision highp float;
+-  uniform sampler2D u_texture;
++  uniform highp sampler2D u_texture;
+   uniform vec3 u_tintColor;
+   uniform float u_tintIntensity;
+   varying vec2 v_texCoord;
+@@ -78,7 +78,7 @@ const TINT_SHADER = `
+ `;
+ const DOMAIN_WARP_SHADER = `
+   precision highp float;
+-  uniform sampler2D u_texture;
++  uniform highp sampler2D u_texture;
+   uniform float u_time;
+   uniform float u_intensity;
+   varying vec2 v_texCoord;
+@@ -139,7 +139,7 @@ const DOMAIN_WARP_SHADER = `
+ `;
+ const OUTPUT_SHADER = `
+   precision highp float;
+-  uniform sampler2D u_texture;
++  uniform highp sampler2D u_texture;
+   uniform float u_saturation;
+   uniform float u_dithering;
+   uniform float u_time;
+@@ -218,25 +218,41 @@ export class Kawarp {
+     _dithering;
+     _scale;
+     hasImage = false;
++    isWebGL2 = false;
++    halfFloatRenderable = false;
++    highPrecisionOutput = false;
++    highPrecisionSource = false;
++    floatSourceUnavailable = false;
++    sourceUploadWidth = 0;
++    sourceUploadHeight = 0;
++    sourceUploadFloat = false;
+     // Cached attribute locations
+     attribs;
+     // Cached uniform locations
+     uniforms;
+     constructor(canvas, options = {}) {
+         this.canvas = canvas;
+-        const gl = canvas.getContext("webgl", {
++        const contextOptions = {
+             alpha: true,
+             antialias: false,
+             depth: false,
+             stencil: false,
+             preserveDrawingBuffer: true,
+             powerPreference: "high-performance",
+-        });
++        };
++        const gl = ((options.highPrecision || options.highPrecisionInput) ? canvas.getContext("webgl2", contextOptions) : null)
++            || canvas.getContext("webgl", contextOptions);
+         if (!gl)
+             throw new Error("WebGL not supported");
+         this.gl = gl;
+-        this.halfFloatExt = gl.getExtension("OES_texture_half_float");
+-        this.halfFloatLinearExt = gl.getExtension("OES_texture_half_float_linear");
++        this.isWebGL2 = typeof gl.texStorage2D === "function";
++        if (this.isWebGL2) {
++            this.halfFloatRenderable = !!gl.getExtension("EXT_color_buffer_float");
++        } else {
++            this.halfFloatExt = gl.getExtension("OES_texture_half_float");
++            this.halfFloatLinearExt = gl.getExtension("OES_texture_half_float_linear");
++            this.halfFloatRenderable = !!gl.getExtension("EXT_color_buffer_half_float");
++        }
+         this._warpIntensity = options.warpIntensity ?? 1.0;
+         this._blurPasses = options.blurPasses ?? 8;
+         this._animationSpeed = options.animationSpeed ?? 1.0;
+@@ -303,6 +319,23 @@ export class Kawarp {
+         const initW = Math.max(1, canvas.width || 640);
+         const initH = Math.max(1, canvas.height || 360);
+         this.warpFBO = this.createFramebuffer(initW, initH, true);
++        // Preserve SDR brightness while avoiding 8-bit quantization at canvas output.
++        // This is optional: older browsers and unsupported GPUs retain RGBA8.
++        if (options.highPrecision && this.isWebGL2 && this.halfFloatRenderable
++            && typeof gl.drawingBufferStorage === "function") {
++            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
++            try {
++                gl.drawingBufferStorage(gl.RGBA16F, canvas.width, canvas.height);
++                this.highPrecisionOutput = gl.getError() === gl.NO_ERROR
++                    && gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE
++                    && gl.getParameter(gl.RED_BITS) === 16;
++            } catch {
++                this.highPrecisionOutput = false;
++            }
++            if (!this.highPrecisionOutput) {
++                gl.drawingBufferStorage(gl.RGBA8, canvas.width, canvas.height);
++            }
++        }
+     }
+     // Getters and setters
+     get warpIntensity() {
+@@ -315,7 +348,7 @@ export class Kawarp {
+         return this._blurPasses;
+     }
+     set blurPasses(value) {
+-        const newValue = Math.max(1, Math.min(40, Math.floor(value)));
++        const newValue = Math.max(0, Math.min(40, Math.floor(value)));
+         if (newValue !== this._blurPasses) {
+             this._blurPasses = newValue;
+             // Re-blur with new pass count if we have an image
+@@ -328,7 +361,7 @@ export class Kawarp {
+         return this._targetAnimationSpeed;
+     }
+     set animationSpeed(value) {
+-        this._targetAnimationSpeed = Math.max(0.1, Math.min(5, value));
++        this._targetAnimationSpeed = Math.max(0, Math.min(16, value));
+     }
+     get transitionDuration() {
+         return this._transitionDuration;
+@@ -410,6 +443,7 @@ export class Kawarp {
+             tintIntensity: this._tintIntensity,
+             dithering: this._dithering,
+             scale: this._scale,
++            highPrecision: this.highPrecisionOutput,
+         };
+     }
+     // Image loading methods
+@@ -441,6 +475,8 @@ export class Kawarp {
+         const gl = this.gl;
+         gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
+         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
++        this.highPrecisionSource = false;
++        this.sourceUploadWidth = 0;
+         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+         if ("close" in bitmap && typeof bitmap.close === "function") {
+             bitmap.close();
+@@ -448,13 +484,45 @@ export class Kawarp {
+         this.processNewImage();
+     }
+     loadImageElement(source) {
++        this.highPrecisionSource = false;
++        this.sourceUploadWidth = 0;
+         this.gl.bindTexture(this.gl.TEXTURE_2D, this.sourceTexture);
+         this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, source);
+         this.processNewImage();
+     }
+     loadImageData(data, width, height) {
+-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.sourceTexture);
+-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, width, height, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, data instanceof Uint8ClampedArray ? new Uint8Array(data.buffer) : data);
++        const gl = this.gl;
++        gl.bindTexture(gl.TEXTURE_2D, this.sourceTexture);
++        this.highPrecisionSource = false;
++        if (data instanceof Float32Array && this.isWebGL2 && !this.floatSourceUnavailable) {
++            // Normalized sRGB floats preserve the fractional results of sampling
++            // and temporal smoothing. RGBA16F supports linear filtering in WebGL2.
++            if (this.sourceUploadFloat && this.sourceUploadWidth === width && this.sourceUploadHeight === height) {
++                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.FLOAT, data);
++                this.highPrecisionSource = true;
++            } else {
++                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, data);
++                // Validate a new allocation, not every video frame: getError can
++                // synchronize with the GPU and stall the capture loop.
++                this.highPrecisionSource = gl.getError() === gl.NO_ERROR;
++                this.floatSourceUnavailable = !this.highPrecisionSource;
++            }
++        }
++        if (!this.highPrecisionSource) {
++            const bytes = data instanceof Float32Array
++                ? Uint8Array.from(data, value => Math.round(Math.max(0, Math.min(1, value)) * 255))
++                : data instanceof Uint8ClampedArray
++                    ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
++                    : data;
++            if (!this.sourceUploadFloat && this.sourceUploadWidth === width && this.sourceUploadHeight === height) {
++                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
++            } else {
++                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
++            }
++        }
++        this.sourceUploadWidth = width;
++        this.sourceUploadHeight = height;
++        this.sourceUploadFloat = this.highPrecisionSource;
+         this.processNewImage();
+     }
+     loadFromImageData(imageData) {
+@@ -713,6 +781,12 @@ export class Kawarp {
+     }
+     createShader(type, source) {
+         const gl = this.gl;
++        if (this.isWebGL2) {
++            source = type === gl.VERTEX_SHADER
++                ? "#version 300 es\n" + source.replace(/\battribute\b/g, "in").replace(/\bvarying\b/g, "out")
++                : "#version 300 es\nprecision highp float;\nout vec4 outputColor;\n"
++                    + source.replace(/\bvarying\b/g, "in").replace(/\btexture2D\b/g, "texture").replace(/\bgl_FragColor\b/g, "outputColor");
++        }
+         const shader = gl.createShader(type);
+         if (!shader)
+             throw new Error("Failed to create shader");
+@@ -768,16 +842,22 @@ export class Kawarp {
+     createFramebuffer(width, height, useHighPrecision = false) {
+         const gl = this.gl;
+         const texture = this.createTexture();
+-        const canUseHalfFloat = useHighPrecision && this.halfFloatExt && this.halfFloatLinearExt;
++        const canUseHalfFloat = useHighPrecision && this.halfFloatRenderable
++            && (this.isWebGL2 || (this.halfFloatExt && this.halfFloatLinearExt));
+         const type = canUseHalfFloat
+-            ? this.halfFloatExt.HALF_FLOAT_OES
++            ? (this.isWebGL2 ? gl.HALF_FLOAT : this.halfFloatExt.HALF_FLOAT_OES)
+             : gl.UNSIGNED_BYTE;
+-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, type, null);
++        const internalFormat = canUseHalfFloat && this.isWebGL2 ? gl.RGBA16F : gl.RGBA;
++        gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, width, height, 0, gl.RGBA, type, null);
+         const framebuffer = gl.createFramebuffer();
+         if (!framebuffer)
+             throw new Error("Failed to create framebuffer");
+         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
++        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE && canUseHalfFloat) {
++            this.halfFloatRenderable = false;
++            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
++        }
+         return { framebuffer, texture, width, height };
+     }
+     deleteFramebuffer(fbo) {

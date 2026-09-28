@@ -12,6 +12,7 @@ import {
   MotionTab,
   NowPlaying,
   TabBar,
+  VideoTab,
 } from "./components";
 import { useContentScript, useGradientSettings, useTabState } from "./hooks";
 import { GradientSettings, SettingsTab, defaultSettings } from "./types";
@@ -62,6 +63,7 @@ const Popup: React.FC = () => {
     general: <GeneralTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
     look: <LookTab {...sliderProps} onToggleChange={handleToggleChange} />,
     motion: <MotionTab {...sliderProps} />,
+    video: <VideoTab {...sliderProps} onToggleChange={handleToggleChange} />,
     audio: <AudioTab {...sliderProps} onToggleChange={handleToggleChange} />,
     extras: <ExtrasTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
   };
