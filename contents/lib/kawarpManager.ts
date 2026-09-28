@@ -1,6 +1,10 @@
 import Kawarp from "@kawarp/core";
 import { brightnessForHighlight, measureArtworkHighlight } from "./artworkBrightness";
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
+import {
+  PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR,
+  SONG_IMAGE_CONTAINER_SELECTOR,
+} from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
 
 interface KawarpState {
@@ -263,7 +267,7 @@ const resolveImageUrl = (url: string): Promise<string> => {
 };
 
 const getAlbumArtUrl = (): string | null => {
-  const songImage = document.querySelector("#song-image img") as HTMLImageElement;
+  const songImage = document.querySelector(`${SONG_IMAGE_CONTAINER_SELECTOR} img`) as HTMLImageElement;
   if (songImage?.src && !songImage.src.startsWith("data:") && songImage.naturalHeight > 0) {
     return songImage.src;
   }
@@ -274,7 +278,7 @@ const getAlbumArtUrl = (): string | null => {
   }
 
   const playerBarThumbnail = document.querySelector(
-    "ytmusic-player-bar .thumbnail img, .middle-controls .thumbnail img"
+    `${PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR} img`
   ) as HTMLImageElement;
   if (playerBarThumbnail?.src && !playerBarThumbnail.src.startsWith("data:") && playerBarThumbnail.naturalHeight > 0) {
     return playerBarThumbnail.src;

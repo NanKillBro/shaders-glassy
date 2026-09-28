@@ -1,4 +1,8 @@
-import { PLAYER_MEDIA_SELECTOR } from "@/shared/constants/mediaElements";
+import {
+  PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR,
+  PLAYER_MEDIA_SELECTOR,
+  SONG_IMAGE_CONTAINER_SELECTOR,
+} from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
 import { checkAndReconnectElement } from "./audioAnalysis";
 
@@ -23,6 +27,7 @@ let hiddenTimestamp = 0;
 export const initialize = (updateCallback: UpdateCallback, navigationChangeCallback?: NavigationCallback): void => {
   let timeoutId: NodeJS.Timeout;
   let isProcessing = false;
+  let hasQueuedUpdate = false;
   let processingStartedAt = 0;
   const PROCESSING_WATCHDOG_MS = 30000;
 
@@ -32,6 +37,7 @@ export const initialize = (updateCallback: UpdateCallback, navigationChangeCallb
         logger.error("debouncedUpdate stuck for >30s, force-resetting");
         isProcessing = false;
       } else {
+        hasQueuedUpdate = true;
         return;
       }
     }
@@ -39,9 +45,14 @@ export const initialize = (updateCallback: UpdateCallback, navigationChangeCallb
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => {
       isProcessing = true;
+      hasQueuedUpdate = false;
       processingStartedAt = Date.now();
       Promise.resolve(updateCallback()).finally(() => {
         isProcessing = false;
+        if (hasQueuedUpdate) {
+          hasQueuedUpdate = false;
+          debouncedUpdate?.();
+        }
       });
     }, 300);
   };
@@ -63,7 +74,7 @@ const setupSongImageObserver = (): void => {
       if (mutation.type !== "attributes" || mutation.attributeName !== "src") continue;
       const target = mutation.target;
       if (!(target instanceof Element)) continue;
-      if (!target.closest("#song-image, ytmusic-player-bar .thumbnail")) continue;
+      if (!target.closest(`${SONG_IMAGE_CONTAINER_SELECTOR}, ${PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR}`)) continue;
       debouncedUpdate?.();
       return;
     }
