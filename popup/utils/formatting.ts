@@ -6,5 +6,6 @@ export const formatValue = (key: string, value: number): string => {
   if (key === "kawarpBlurPasses") return value.toFixed(0);
   if (key === "kawarpTransitionDuration") return value.toFixed(0) + "ms";
   if (key === "kawarpDithering") return value.toFixed(3);
+  if (key === "autoDimStrength") return `${Math.round(value * 100)}%`;
   return value.toFixed(2);
 };

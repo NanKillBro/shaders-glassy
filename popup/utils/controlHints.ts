@@ -14,6 +14,8 @@ export const CONTROL_HINTS: Partial<Record<keyof GradientSettings, string>> = {
   kawarpSaturation:
     "Colour intensity of the artwork. Above 1.0 is more vivid, below 1.0 is muted. 1.0 keeps the original colours.",
   kawarpDithering: "Adds fine noise so smooth gradients do not band into visible steps. Higher values add more grain.",
+  autoDimStrength:
+    "How far bright artwork is darkened so white lyrics stay readable. At 0 nothing changes, higher values darken bright covers more.",
   audioBeatThreshold:
     "Amplitude a peak has to clear to count as a beat. Lower is more sensitive and triggers on quieter sounds.",
   audioSpeedMultiplier: "How far animation speed jumps on a detected beat. Applied momentarily, then eased back down.",

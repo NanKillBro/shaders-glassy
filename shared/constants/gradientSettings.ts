@@ -9,6 +9,9 @@ export interface GradientSettings {
   kawarpSaturation: number;
   kawarpDithering: number;
   kawarpAudioScaleBoost: number;
+  // Bright artwork
+  autoDimBrightArtwork: boolean;
+  autoDimStrength: number;
   // Audio responsive
   audioResponsive: boolean;
   audioSpeedMultiplier: number;
@@ -37,6 +40,9 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   kawarpSaturation: 1.5,
   kawarpDithering: 0.008,
   kawarpAudioScaleBoost: 2,
+  // Bright artwork
+  autoDimBrightArtwork: true,
+  autoDimStrength: 0.3,
   // Audio responsive
   audioResponsive: true,
   audioSpeedMultiplier: 4,

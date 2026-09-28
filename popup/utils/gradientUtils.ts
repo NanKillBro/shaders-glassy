@@ -14,6 +14,7 @@ export const getControlLabel = (key: string): string => {
     audioBeatThreshold: "Beat threshold",
     audioSpeedMultiplier: "Speed multiplier",
     kawarpAudioScaleBoost: "Scale boost",
+    autoDimStrength: "Dim strength",
   };
 
   return labels[key] || capitalizeFirst(key);

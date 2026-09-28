@@ -1,4 +1,5 @@
 import Kawarp from "@kawarp/core";
+import { brightnessForHighlight, measureArtworkHighlight } from "./artworkBrightness";
 import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
 import { logger } from "@/shared/utils/logger";
 
@@ -23,6 +24,7 @@ interface KawarpState {
   targetSpeed: number;
   speedAnimationId: number | null;
   isPaused: boolean;
+  highlightLuminance: number | null;
 }
 
 const createEmptyState = (): KawarpState => ({
@@ -46,6 +48,7 @@ const createEmptyState = (): KawarpState => ({
   targetSpeed: 1,
   speedAnimationId: null,
   isPaused: false,
+  highlightLuminance: null,
 });
 
 const SCALE_LERP_UP = 0.5;
@@ -57,6 +60,10 @@ const SPEED_LERP_DOWN = 0.03;
 const SPEED_THRESHOLD = 0.001;
 
 export const PIP_LOCATION = "pip";
+
+// Matches the cosine blend @kawarp/core uses for image crossfades.
+const KAWARP_CROSSFADE_EASING = "cubic-bezier(0.37, 0, 0.63, 1)";
+const SETTING_CHANGE_FILTER_TRANSITION_MS = 150;
 
 const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => {
   try {
@@ -71,6 +78,25 @@ const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => 
       URL.revokeObjectURL(blobUrl);
     }
   }
+};
+
+const applyArtworkBrightness = (state: KawarpState, transitionMs?: number): void => {
+  if (!state.container || !state.lastSettings) return;
+  const { autoDimBrightArtwork, autoDimStrength, kawarpTransitionDuration } = state.lastSettings;
+  const filterTransitionMs = transitionMs ?? kawarpTransitionDuration;
+  const brightness =
+    autoDimBrightArtwork && state.highlightLuminance !== null
+      ? brightnessForHighlight(state.highlightLuminance, autoDimStrength)
+      : 1;
+  const isHidden = state.container.style.opacity === "0";
+  state.container.style.transition = `opacity 0.5s ease-out, filter ${isHidden ? 0 : filterTransitionMs}ms ${KAWARP_CROSSFADE_EASING}`;
+  state.container.style.filter = brightness < 1 ? `brightness(${brightness})` : "";
+};
+
+const loadArtwork = async (state: KawarpState, instance: Kawarp, url: string): Promise<void> => {
+  const [, highlightLuminance] = await Promise.all([loadImageSafely(instance, url), measureArtworkHighlight(url)]);
+  state.highlightLuminance = highlightLuminance;
+  applyArtworkBrightness(state);
 };
 
 const animateScale = (state: KawarpState): void => {
@@ -139,7 +165,9 @@ const settingsEqual = (a: GradientSettings | null, b: GradientSettings): boolean
     a.kawarpAnimationSpeed === b.kawarpAnimationSpeed &&
     a.kawarpSaturation === b.kawarpSaturation &&
     a.kawarpDithering === b.kawarpDithering &&
-    a.kawarpOpacity === b.kawarpOpacity
+    a.kawarpOpacity === b.kawarpOpacity &&
+    a.autoDimBrightArtwork === b.autoDimBrightArtwork &&
+    a.autoDimStrength === b.autoDimStrength
   );
 };
 
@@ -396,11 +424,12 @@ export const createKawarp = async (
   state.lastSettings = { ...settings };
   state.lastMultipliers = { ...multipliers };
 
+  state.isTransitioning = true;
   let albumArtUrl = getAlbumArtUrl();
   if (albumArtUrl) {
     albumArtUrl = await resolveImageUrl(albumArtUrl);
     try {
-      await loadImageSafely(state.instance, albumArtUrl);
+      await loadArtwork(state, state.instance, albumArtUrl);
       state.currentImageUrl = albumArtUrl;
       lastKnownImageUrl = albumArtUrl;
       logger.log("Kawarp loaded album art:", albumArtUrl);
@@ -410,6 +439,8 @@ export const createKawarp = async (
   }
 
   state.instance.start();
+  state.isTransitioning = false;
+  processQueuedImage(state, location);
 
   state.observer = new IntersectionObserver(
     entries => {
@@ -510,6 +541,14 @@ export const destroyKawarp = (location?: string): void => {
   }
 };
 
+const processQueuedImage = (state: KawarpState, location: string): void => {
+  const queuedImageUrl = state.pendingImageUrl;
+  state.pendingImageUrl = null;
+  if (!queuedImageUrl || queuedImageUrl === state.currentImageUrl) return;
+  logger.log(`Processing queued image for ${location}:`, queuedImageUrl);
+  void processImageTransition(state, queuedImageUrl, location);
+};
+
 const processImageTransition = async (state: KawarpState, imageUrl: string, location: string): Promise<void> => {
   if (!state.instance || !state.container) return;
 
@@ -522,7 +561,7 @@ const processImageTransition = async (state: KawarpState, imageUrl: string, loca
   }
 
   try {
-    await loadImageSafely(state.instance, imageUrl);
+    await loadArtwork(state, state.instance, imageUrl);
     state.currentImageUrl = imageUrl;
     lastKnownImageUrl = imageUrl;
     logger.log(`Updated kawarp image for ${location}:`, imageUrl);
@@ -535,13 +574,7 @@ const processImageTransition = async (state: KawarpState, imageUrl: string, loca
   state.transitionTimeoutId = window.setTimeout(() => {
     state.isTransitioning = false;
     state.transitionTimeoutId = null;
-
-    if (state.pendingImageUrl && state.pendingImageUrl !== state.currentImageUrl) {
-      const pendingUrl = state.pendingImageUrl;
-      state.pendingImageUrl = null;
-      logger.log(`Processing queued image for ${location}:`, pendingUrl);
-      processImageTransition(state, pendingUrl, location);
-    }
+    processQueuedImage(state, location);
   }, transitionDuration);
 };
 
@@ -648,6 +681,8 @@ export const updateKawarpSettings = (
     if (state.container && state.container.style.opacity !== opacityStr) {
       state.container.style.opacity = opacityStr;
     }
+
+    applyArtworkBrightness(state, SETTING_CHANGE_FILTER_TRANSITION_MS);
   };
 
   if (location) {
@@ -787,7 +822,7 @@ export const createPipKawarp = async (
 
     if (imageUrl) {
       try {
-        await loadImageSafely(state.instance, imageUrl);
+        await loadArtwork(state, state.instance, imageUrl);
         state.currentImageUrl = imageUrl;
       } catch (error) {
         logger.error("Failed to load artwork for pip kawarp:", error);
