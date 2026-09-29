@@ -1,10 +1,10 @@
 import type { GradientSettings } from "@/popup/types";
 
 export const CONTROL_HINTS: Partial<Record<keyof GradientSettings, string>> = {
-  videoGpuBrightnessSize:
-    "Width and height of the tiny brightness thumbnail. Larger values improve dimming estimates but cost more to analyze. GPU mode only.",
-  videoGpuBrightnessInterval:
-    "Minimum time between asynchronous brightness checks. Zero checks each captured frame when the previous read is ready. GPU mode only.",
+  videoBrightnessSampleSize:
+    "Width and height of the tiny brightness thumbnail. Larger values improve dimming estimates but cost more to analyze.",
+  videoBrightnessInterval:
+    "Minimum time between asynchronous brightness checks. Checks stop while the video is paused.",
   videoOpacity: "Visibility of the background while sampling the music video.",
   videoWarpIntensity: "Direct warp strength for video. Zero preserves the frame; 1 allows the full abstract warp.",
   videoBlurPasses: "Extra shader blur passes. Zero bypasses the blur passes; sampling can still soften the image.",
@@ -20,12 +20,9 @@ export const CONTROL_HINTS: Partial<Record<keyof GradientSettings, string>> = {
   videoZoomAttack: "How quickly zoom rises. Larger values respond more sharply.",
   videoZoomRelease: "How quickly zoom settles after a beat. Smaller values produce a longer release.",
   videoSampleWidth: "Columns of sampled colors. Larger samples retain more detail and cost more to read back.",
-  videoSampleHeight: "Rows of sampled colors. Current default is 128 × 72 pixels.",
-  videoFrameRate:
-    "Maximum fresh captures per second. Zero follows decoded video frames; browsers without frame callbacks poll at 30 FPS.",
+  videoSampleHeight: "Rows of sampled colors. Larger samples retain more detail.",
+  videoFrameRate: "Maximum fresh captures per second. Zero follows decoded video frames.",
   videoColorResponse: "Smooth color changes over this time. Zero follows each sampled frame immediately.",
-  videoFrameTransition:
-    "Short shader crossfade between samples. Capped to the actual capture interval to avoid interrupted fades; use Color smoothing for longer blends.",
   videoDownsampleFactor:
     "Maximum shrink per downsampling stage. Smaller steps average fine detail more carefully; larger steps are cheaper.",
   kawarpOpacity:

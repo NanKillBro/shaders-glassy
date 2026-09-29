@@ -153,11 +153,7 @@ export const useGradientSettings = () => {
               "enableAnimatedArt",
               "autoDimBrightArtwork",
               "videoEnabled",
-              "videoAutoDim",
               "videoAudioResponsive",
-              "videoStagedDownsampling",
-              "videoHighPrecisionSampling",
-              "videoGpuProcessing",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {
