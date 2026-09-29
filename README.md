@@ -17,12 +17,26 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
+- **Video Ambient Colors**: During music videos, the background follows the video itself, with its own look and motion controls in the **Video** tab. Audio-only tracks, ads, and videos the browser can't read fall back to album artwork.
+- **High-precision Output**: On HDR displays, supported browsers draw into a 16-bit floating-point canvas, which reduces banding in dark gradients. Brightness stays in the normal SDR range.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
 - **Real-time Configuration**: Adjust settings and see changes instantly via the popup
 - **Persistent Settings**: Configuration saved automatically across sessions
 - **Multi-page Support**: Works on player pages, homepage, and search results
 - **Cross-browser**: Supports Chrome, Firefox, Edge, Brave, Arc, and other Chromium browsers
+
+## Video controls
+
+The **Video** tab only affects music videos. **Look** and **Motion** still configure album artwork. Video settings are saved, exported, imported, and reset with everything else.
+
+- **Appearance:** opacity, warp strength, blur passes (0 skips the blur), saturation, dithering, and how much dithering to keep on an HDR display. **Dim bright frames** is the same toggle as the artwork setting, with its own strength, response time, and sampling rate for video.
+- **Motion:** animation speed, beat response, beat speed boost, beat zoom, and zoom attack and release. Beats come from the shared detector in **Audio**, but the video boost amounts are separate from the artwork ones.
+- **Sampling:** the size of the sampled color map (208 × 117 by default), a frame rate limit (0 follows the video), color smoothing, and how aggressively each downsampling step shrinks the frame.
+
+Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, optionally smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms. While the video is paused it only measures again after a seek. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
+
+With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether color smoothing keeps float32 history.
 
 ## Installation
 

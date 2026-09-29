@@ -7,4 +7,4 @@ export { NowPlaying } from "./NowPlaying";
 export { TabBar } from "./TabBar";
 export { Tooltip } from "./Tooltip";
 
-export { AboutTab, AudioTab, ExtrasTab, GeneralTab, LookTab, MotionTab } from "./tabs";
+export { AboutTab, AudioTab, ExtrasTab, GeneralTab, LookTab, MotionTab, VideoTab } from "./tabs";

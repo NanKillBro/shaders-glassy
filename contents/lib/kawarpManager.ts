@@ -1,11 +1,19 @@
-import Kawarp from "@kawarp/core";
-import { brightnessForHighlight, measureArtworkHighlight } from "./artworkBrightness";
-import type { DynamicMultipliers, GradientSettings } from "@/shared/constants/gradientSettings";
+import {
+  DEFAULT_DYNAMIC_MULTIPLIERS,
+  DEFAULT_GRADIENT_SETTINGS,
+  type DynamicMultipliers,
+  type GradientSettings,
+} from "@/shared/constants/gradientSettings";
 import {
   PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR,
+  PLAYER_VIDEO_SELECTOR,
   SONG_IMAGE_CONTAINER_SELECTOR,
 } from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
+import { videoMotion } from "@/shared/utils/videoSettings";
+import Kawarp, { type KawarpVideoOptions } from "@kawarp/core";
+import { isAdPlaying } from "./adState";
+import { brightnessForHighlight, measureArtworkHighlight, measureHighlightLuminance } from "./artworkBrightness";
 
 interface KawarpState {
   backdrop: HTMLDivElement | null;
@@ -29,6 +37,13 @@ interface KawarpState {
   speedAnimationId: number | null;
   isPaused: boolean;
   highlightLuminance: number | null;
+  videoMode: boolean;
+  videoSource: HTMLVideoElement | null;
+  videoUnavailableSince: number | null;
+  failedVideoSrc: string | null;
+  brightnessSampledAt: number;
+  brightnessSampledTime: number;
+  stopWatchingOutput: (() => void) | null;
 }
 
 const createEmptyState = (): KawarpState => ({
@@ -53,6 +68,13 @@ const createEmptyState = (): KawarpState => ({
   speedAnimationId: null,
   isPaused: false,
   highlightLuminance: null,
+  videoMode: false,
+  videoSource: null,
+  videoUnavailableSince: null,
+  failedVideoSrc: null,
+  brightnessSampledAt: 0,
+  brightnessSampledTime: -1,
+  stopWatchingOutput: null,
 });
 
 const SCALE_LERP_UP = 0.5;
@@ -68,6 +90,73 @@ export const PIP_LOCATION = "pip";
 // Matches the cosine blend @kawarp/core uses for image crossfades.
 const KAWARP_CROSSFADE_EASING = "cubic-bezier(0.37, 0, 0.63, 1)";
 const SETTING_CHANGE_FILTER_TRANSITION_MS = 150;
+const VIDEO_WATCH_INTERVAL_MS = 100;
+// Buffering and source swaps briefly report no video; keep the last frame instead of flashing artwork.
+const VIDEO_UNAVAILABLE_GRACE_MS = 1500;
+const ZOOM_LERP_MIN = 0.01;
+const ZOOM_LERP_MAX = 1;
+
+const isVideoMode = (state: KawarpState): boolean => state.videoMode && !!state.lastSettings?.videoEnabled;
+const hasHdrDisplay = (canvas: HTMLCanvasElement): boolean =>
+  canvas.ownerDocument.defaultView?.matchMedia("(dynamic-range: high)").matches ?? false;
+
+const outputDithering = (state: KawarpState, requested: number): number => {
+  const reduction = isVideoMode(state) ? state.lastSettings?.videoHdrDitheringScale ?? 1 : 1;
+  return state.instance?.highPrecisionOutput && state.canvas && hasHdrDisplay(state.canvas)
+    ? requested * reduction
+    : requested;
+};
+
+const watchOutputDisplay = (state: KawarpState): void => {
+  const query = state.canvas?.ownerDocument.defaultView?.matchMedia("(dynamic-range: high)");
+  const update = () => {
+    if (state.instance && state.lastSettings) {
+      const settings = state.lastSettings;
+      state.instance.dithering = outputDithering(
+        state,
+        isVideoMode(state) ? settings.videoDithering : settings.kawarpDithering
+      );
+      logger.log("Canvas output precision", {
+        canvas: state.container?.id,
+        hdrDisplay: query?.matches ?? false,
+        float16DrawingBuffer: state.instance.highPrecisionOutput,
+      });
+    }
+  };
+  update();
+  query?.addEventListener("change", update);
+  state.stopWatchingOutput = () => query?.removeEventListener("change", update);
+};
+
+const modeMotion = (state: KawarpState, settings: GradientSettings, multipliers: DynamicMultipliers) =>
+  isVideoMode(state)
+    ? videoMotion(settings, multipliers)
+    : {
+        speed: settings.kawarpAnimationSpeed * multipliers.speedMultiplier,
+        scale: multipliers.scaleMultiplier,
+      };
+
+const applyModeSettings = (state: KawarpState, updateOpacity = true): void => {
+  const settings = state.lastSettings;
+  if (!state.instance || !settings) return;
+  const video = isVideoMode(state);
+  const motion = modeMotion(state, settings, state.lastMultipliers ?? DEFAULT_DYNAMIC_MULTIPLIERS);
+  state.instance.setOptions({
+    warpIntensity: video ? settings.videoWarpIntensity : settings.kawarpWarpIntensity,
+    blurPasses: video ? settings.videoBlurPasses : settings.kawarpBlurPasses,
+    animationSpeed: state.isPaused ? 0 : motion.speed,
+    transitionDuration: settings.kawarpTransitionDuration,
+    saturation: video ? settings.videoSaturation : settings.kawarpSaturation,
+    dithering: outputDithering(state, video ? settings.videoDithering : settings.kawarpDithering),
+  });
+  if (state.isPaused) state.instance.renderFrame();
+  state.currentSpeed = state.isPaused ? 0 : motion.speed;
+  state.targetSpeed = state.currentSpeed;
+  state.targetScale = motion.scale;
+  if (state.scaleAnimationId === null) state.scaleAnimationId = requestAnimationFrame(() => animateScale(state));
+  if (updateOpacity && state.container)
+    state.container.style.opacity = String(video ? settings.videoOpacity : settings.kawarpOpacity);
+};
 
 const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => {
   try {
@@ -86,10 +175,14 @@ const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => 
 
 const applyArtworkBrightness = (state: KawarpState, transitionMs?: number): void => {
   if (!state.container || !state.lastSettings) return;
-  const { autoDimBrightArtwork, autoDimStrength, kawarpTransitionDuration } = state.lastSettings;
-  const filterTransitionMs = transitionMs ?? kawarpTransitionDuration;
+  const settings = state.lastSettings;
+  const video = isVideoMode(state);
+  const autoDimStrength = video ? settings.videoDimStrength : settings.autoDimStrength;
+  const filterTransitionMs = video
+    ? settings.videoBrightnessTransition
+    : transitionMs ?? settings.kawarpTransitionDuration;
   const brightness =
-    autoDimBrightArtwork && state.highlightLuminance !== null
+    settings.autoDimBrightArtwork && state.highlightLuminance !== null
       ? brightnessForHighlight(state.highlightLuminance, autoDimStrength)
       : 1;
   const isHidden = state.container.style.opacity === "0";
@@ -98,7 +191,9 @@ const applyArtworkBrightness = (state: KawarpState, transitionMs?: number): void
 };
 
 const loadArtwork = async (state: KawarpState, instance: Kawarp, url: string): Promise<void> => {
+  instance.transitionDuration = state.lastSettings?.kawarpTransitionDuration ?? 1000;
   const [, highlightLuminance] = await Promise.all([loadImageSafely(instance, url), measureArtworkHighlight(url)]);
+  if (state.instance !== instance || state.videoMode) return;
   state.highlightLuminance = highlightLuminance;
   applyArtworkBrightness(state);
 };
@@ -118,7 +213,16 @@ const animateScale = (state: KawarpState): void => {
     return;
   }
 
-  const lerpFactor = diff > 0 ? SCALE_LERP_UP : SCALE_LERP_DOWN;
+  const settings = state.lastSettings;
+  const lerpFactor =
+    settings && isVideoMode(state)
+      ? Math.min(
+          ZOOM_LERP_MAX,
+          Math.max(ZOOM_LERP_MIN, diff > 0 ? settings.videoZoomAttack : settings.videoZoomRelease) || ZOOM_LERP_MIN
+        )
+      : diff > 0
+        ? SCALE_LERP_UP
+        : SCALE_LERP_DOWN;
   state.currentScale += diff * lerpFactor;
   state.instance.setOptions({ scale: state.currentScale });
 
@@ -153,6 +257,161 @@ const animateSpeed = (state: KawarpState): void => {
 const kawarps = new Map<string, KawarpState>();
 const creationInProgress = new Set<string>();
 let lastKnownImageUrl: string | null = null;
+let videoWatcherId: number | null = null;
+
+const canSampleForState = (state: KawarpState): boolean =>
+  !!state.instance &&
+  !!state.container?.isConnected &&
+  state.isVisible &&
+  state.container.ownerDocument.visibilityState === "visible";
+
+// Kawarp replaces every option on each loadVideo call, so the error handler must ride along each time.
+const videoSourceOptions = (
+  state: KawarpState,
+  video: HTMLVideoElement,
+  settings: GradientSettings
+): KawarpVideoOptions => ({
+  sampleWidth: settings.videoSampleWidth,
+  sampleHeight: settings.videoSampleHeight,
+  downsampleFactor: settings.videoDownsampleFactor,
+  frameRate: settings.videoFrameRate,
+  smoothing: settings.videoColorResponse,
+  onError: error => {
+    logger.error("Video ambient colors unavailable for this source:", error);
+    state.failedVideoSrc = video.currentSrc;
+    if (state.videoSource === video) state.videoSource = null;
+  },
+});
+
+const findPlayableVideo = (): HTMLVideoElement | null => {
+  if (isAdPlaying()) return null;
+  const video = document.querySelector<HTMLVideoElement>(PLAYER_VIDEO_SELECTOR);
+  return video && !video.error && video.videoWidth > 0 ? video : null;
+};
+
+const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: GradientSettings): void => {
+  const instance = state.instance;
+  if (!instance) return;
+  state.videoSource = video;
+  try {
+    instance.loadVideo(video, videoSourceOptions(state, video, settings));
+  } catch (error) {
+    logger.error("Video ambient colors unsupported:", error);
+    stopFollowingVideo(state);
+    state.failedVideoSrc = video.currentSrc;
+  }
+  // The first frame imports synchronously, so a failure has already cleared videoSource.
+  if (state.videoSource !== video) return;
+  state.videoUnavailableSince = null;
+  if (state.videoMode) return;
+  state.videoMode = true;
+  state.highlightLuminance = null;
+  state.brightnessSampledAt = 0;
+  applyModeSettings(state);
+  applyArtworkBrightness(state);
+  logger.log("Following player video", {
+    canvas: state.container?.id,
+    float32History: instance.highPrecisionInput,
+    float16DrawingBuffer: instance.highPrecisionOutput,
+  });
+};
+
+const stopFollowingVideo = (state: KawarpState): void => {
+  state.instance?.unloadVideo();
+  state.videoSource = null;
+};
+
+const leaveVideoMode = (state: KawarpState, location: string): void => {
+  stopFollowingVideo(state);
+  state.videoMode = false;
+  state.videoUnavailableSince = null;
+  applyModeSettings(state);
+  const artwork = getAlbumArtUrl() ?? state.currentImageUrl;
+  if (artwork) void resolveImageUrl(artwork).then(url => processImageTransition(state, url, location));
+};
+
+const sampleVideoBrightness = (state: KawarpState, now: number): void => {
+  const instance = state.instance;
+  const settings = state.lastSettings;
+  const video = state.videoSource;
+  if (!instance || !settings?.autoDimBrightArtwork || !video) return;
+  if (now - state.brightnessSampledAt < settings.videoBrightnessInterval) return;
+  // A paused frame only changes after a seek, so re-measure once it has settled.
+  if (video.seeking) return;
+  if (video.paused && state.highlightLuminance !== null && video.currentTime === state.brightnessSampledTime) return;
+  state.brightnessSampledAt = now;
+  state.brightnessSampledTime = video.currentTime;
+  void instance.sampleSource(settings.videoBrightnessSampleSize).then(pixels => {
+    if (!pixels || state.instance !== instance || !state.videoMode) return;
+    state.highlightLuminance = measureHighlightLuminance(
+      new Uint8ClampedArray(pixels.buffer, pixels.byteOffset, pixels.byteLength)
+    );
+    applyArtworkBrightness(state);
+  });
+};
+
+const syncVideoSource = (
+  state: KawarpState,
+  location: string,
+  playableVideo: HTMLVideoElement | null,
+  now: number
+): void => {
+  const settings = state.lastSettings;
+  if (!state.instance || !settings) return;
+
+  if (!settings.videoEnabled) {
+    if (state.videoMode) leaveVideoMode(state, location);
+    return;
+  }
+  // Off-screen instances keep their last frame without importing new ones.
+  if (!canSampleForState(state)) {
+    if (state.videoSource) stopFollowingVideo(state);
+    return;
+  }
+
+  const followableVideo = playableVideo?.currentSrc === state.failedVideoSrc ? null : playableVideo;
+  if (followableVideo) {
+    // An artwork load in flight would unload the video when it lands; follow once it settles.
+    if (state.videoSource !== followableVideo) {
+      if (state.isTransitioning) return;
+      followVideo(state, followableVideo, settings);
+    }
+    if (state.videoSource) {
+      sampleVideoBrightness(state, now);
+      return;
+    }
+  }
+
+  if (state.videoSource) stopFollowingVideo(state);
+  if (!state.videoMode) return;
+  state.videoUnavailableSince ??= now;
+  if (now - state.videoUnavailableSince >= VIDEO_UNAVAILABLE_GRACE_MS) leaveVideoMode(state, location);
+};
+
+const syncVideoSources = (): void => {
+  let videoWanted = false;
+  let anyVisible = false;
+  for (const state of kawarps.values()) {
+    if (state.lastSettings?.videoEnabled || state.videoMode) videoWanted = true;
+    if (canSampleForState(state)) anyVisible = true;
+  }
+  if (!videoWanted) return;
+  const playableVideo = anyVisible ? findPlayableVideo() : null;
+  const now = performance.now();
+  for (const [location, state] of kawarps) syncVideoSource(state, location, playableVideo, now);
+};
+
+const startVideoWatcher = (): void => {
+  if (videoWatcherId !== null) return;
+  videoWatcherId = window.setInterval(syncVideoSources, VIDEO_WATCH_INTERVAL_MS);
+  syncVideoSources();
+};
+
+const stopVideoWatcher = (): void => {
+  if (videoWatcherId === null) return;
+  window.clearInterval(videoWatcherId);
+  videoWatcherId = null;
+};
 
 const getKawarpState = (location: string): KawarpState => {
   if (!kawarps.has(location)) {
@@ -163,16 +422,7 @@ const getKawarpState = (location: string): KawarpState => {
 
 const settingsEqual = (a: GradientSettings | null, b: GradientSettings): boolean => {
   if (!a) return false;
-  return (
-    a.kawarpWarpIntensity === b.kawarpWarpIntensity &&
-    a.kawarpBlurPasses === b.kawarpBlurPasses &&
-    a.kawarpAnimationSpeed === b.kawarpAnimationSpeed &&
-    a.kawarpSaturation === b.kawarpSaturation &&
-    a.kawarpDithering === b.kawarpDithering &&
-    a.kawarpOpacity === b.kawarpOpacity &&
-    a.autoDimBrightArtwork === b.autoDimBrightArtwork &&
-    a.autoDimStrength === b.autoDimStrength
-  );
+  return (Object.keys(b) as (keyof GradientSettings)[]).every(key => a[key] === b[key]);
 };
 
 const getLocationFromSelector = (targetSelector: string): string => {
@@ -414,6 +664,8 @@ export const createKawarp = async (
   const dynamicSpeed = settings.kawarpAnimationSpeed * multipliers.speedMultiplier;
 
   state.instance = new Kawarp(state.canvas, {
+    highPrecisionInput: true,
+    highPrecisionOutput: hasHdrDisplay(state.canvas),
     warpIntensity: settings.kawarpWarpIntensity,
     blurPasses: settings.kawarpBlurPasses,
     animationSpeed: dynamicSpeed,
@@ -427,6 +679,7 @@ export const createKawarp = async (
   state.targetSpeed = dynamicSpeed;
   state.lastSettings = { ...settings };
   state.lastMultipliers = { ...multipliers };
+  watchOutputDisplay(state);
 
   state.isTransitioning = true;
   let albumArtUrl = getAlbumArtUrl();
@@ -445,6 +698,7 @@ export const createKawarp = async (
   state.instance.start();
   state.isTransitioning = false;
   processQueuedImage(state, location);
+  startVideoWatcher();
 
   state.observer = new IntersectionObserver(
     entries => {
@@ -473,7 +727,7 @@ export const createKawarp = async (
   setTimeout(() => {
     requestAnimationFrame(() => {
       if (state.container) {
-        state.container.style.opacity = settings.kawarpOpacity.toString();
+        state.container.style.opacity = String(isVideoMode(state) ? settings.videoOpacity : settings.kawarpOpacity);
       }
       if (state.backdrop) {
         state.backdrop.style.opacity = "1";
@@ -489,6 +743,9 @@ export const destroyKawarp = (location?: string): void => {
   if (location) {
     const state = getKawarpState(location);
     logger.log(`Destroying kawarp for location: ${location}`);
+    stopFollowingVideo(state);
+    state.stopWatchingOutput?.();
+    state.stopWatchingOutput = null;
 
     if (state.transitionTimeoutId !== null) {
       clearTimeout(state.transitionTimeoutId);
@@ -537,6 +794,9 @@ export const destroyKawarp = (location?: string): void => {
     state.isPaused = false;
 
     kawarps.delete(location);
+    if (!Array.from(kawarps.values()).some(state => state.instance)) {
+      stopVideoWatcher();
+    }
   } else {
     logger.log("Destroying all kawarps");
     for (const loc of kawarps.keys()) {
@@ -554,7 +814,8 @@ const processQueuedImage = (state: KawarpState, location: string): void => {
 };
 
 const processImageTransition = async (state: KawarpState, imageUrl: string, location: string): Promise<void> => {
-  if (!state.instance || !state.container) return;
+  // Loading artwork would replace the video; leaveVideoMode restores the current artwork instead.
+  if (!state.instance || !state.container || state.videoMode) return;
 
   const transitionDuration = state.lastSettings?.kawarpTransitionDuration ?? 1000;
 
@@ -565,7 +826,9 @@ const processImageTransition = async (state: KawarpState, imageUrl: string, loca
   }
 
   try {
-    await loadArtwork(state, state.instance, imageUrl);
+    const instance = state.instance;
+    await loadArtwork(state, instance, imageUrl);
+    if (state.instance !== instance) return;
     state.currentImageUrl = imageUrl;
     lastKnownImageUrl = imageUrl;
     logger.log(`Updated kawarp image for ${location}:`, imageUrl);
@@ -576,6 +839,7 @@ const processImageTransition = async (state: KawarpState, imageUrl: string, loca
   }
 
   state.transitionTimeoutId = window.setTimeout(() => {
+    if (state.isPaused) state.instance?.renderFrame();
     state.isTransitioning = false;
     state.transitionTimeoutId = null;
     processQueuedImage(state, location);
@@ -614,20 +878,23 @@ export const updateKawarpSpeed = (
       return;
     }
 
-    const speedChanged = state.lastMultipliers?.speedMultiplier !== multipliers.speedMultiplier;
+    const beatChanged = state.lastMultipliers?.isBeat !== multipliers.isBeat;
+    const speedChanged = state.lastMultipliers?.speedMultiplier !== multipliers.speedMultiplier || beatChanged;
     const scaleChanged = state.lastMultipliers?.scaleMultiplier !== multipliers.scaleMultiplier;
 
     if (!speedChanged && !scaleChanged) {
       return;
     }
 
-    if (speedChanged) {
-      const dynamicSpeed = settings.kawarpAnimationSpeed * multipliers.speedMultiplier;
-      state.instance.animationSpeed = dynamicSpeed;
+    const motion = modeMotion(state, settings, multipliers);
+    if (speedChanged || (isVideoMode(state) && scaleChanged)) {
+      state.instance.animationSpeed = state.isPaused ? 0 : motion.speed;
+      state.currentSpeed = state.isPaused ? 0 : motion.speed;
+      state.targetSpeed = state.currentSpeed;
     }
 
-    if (scaleChanged) {
-      state.targetScale = multipliers.scaleMultiplier;
+    if (scaleChanged || (isVideoMode(state) && speedChanged)) {
+      state.targetScale = motion.scale;
       if (state.scaleAnimationId === null) {
         state.scaleAnimationId = requestAnimationFrame(() => animateScale(state));
       }
@@ -668,23 +935,12 @@ export const updateKawarpSettings = (
       return;
     }
 
-    const dynamicSpeed = settings.kawarpAnimationSpeed * multipliers.speedMultiplier;
-
-    state.instance.setOptions({
-      warpIntensity: settings.kawarpWarpIntensity,
-      blurPasses: settings.kawarpBlurPasses,
-      animationSpeed: dynamicSpeed,
-      saturation: settings.kawarpSaturation,
-      dithering: settings.kawarpDithering,
-    });
-
     state.lastSettings = { ...settings };
     state.lastMultipliers = { ...multipliers };
-
-    const opacityStr = settings.kawarpOpacity.toString();
-    if (state.container && state.container.style.opacity !== opacityStr) {
-      state.container.style.opacity = opacityStr;
-    }
+    applyModeSettings(state);
+    if (state.videoSource)
+      state.instance.loadVideo(state.videoSource, videoSourceOptions(state, state.videoSource, settings));
+    syncVideoSource(state, loc, settings.videoEnabled ? findPlayableVideo() : null, performance.now());
 
     applyArtworkBrightness(state, SETTING_CHANGE_FILTER_TRANSITION_MS);
   };
@@ -753,9 +1009,8 @@ export const resumeKawarp = (location?: string): void => {
     state.isPaused = false;
     state.instance.start();
 
-    const baseSpeed = state.lastSettings?.kawarpAnimationSpeed ?? 1;
-    const multiplier = state.lastMultipliers?.speedMultiplier ?? 1;
-    state.targetSpeed = baseSpeed * multiplier;
+    const settings = state.lastSettings ?? DEFAULT_GRADIENT_SETTINGS;
+    state.targetSpeed = modeMotion(state, settings, state.lastMultipliers ?? DEFAULT_DYNAMIC_MULTIPLIERS).speed;
 
     if (state.speedAnimationId === null) {
       state.speedAnimationId = requestAnimationFrame(() => animateSpeed(state));
@@ -807,9 +1062,11 @@ export const createPipKawarp = async (
     state.container.appendChild(state.canvas);
     pipDocument.body.prepend(state.container);
 
-    const dynamicSpeed = settings.kawarpAnimationSpeed * multipliers.speedMultiplier;
+    const dynamicSpeed = modeMotion(state, settings, multipliers).speed;
 
     state.instance = new Kawarp(state.canvas, {
+      highPrecisionInput: true,
+      highPrecisionOutput: hasHdrDisplay(state.canvas),
       warpIntensity: settings.kawarpWarpIntensity,
       blurPasses: settings.kawarpBlurPasses,
       animationSpeed: dynamicSpeed,
@@ -823,18 +1080,23 @@ export const createPipKawarp = async (
     state.targetSpeed = dynamicSpeed;
     state.lastSettings = { ...settings };
     state.lastMultipliers = { ...multipliers };
+    watchOutputDisplay(state);
 
     if (imageUrl) {
+      state.isTransitioning = true;
       try {
         await loadArtwork(state, state.instance, imageUrl);
         state.currentImageUrl = imageUrl;
       } catch (error) {
         logger.error("Failed to load artwork for pip kawarp:", error);
+      } finally {
+        state.isTransitioning = false;
       }
     }
 
     state.instance.start();
-    state.container.style.opacity = settings.kawarpOpacity.toString();
+    state.container.style.opacity = String(isVideoMode(state) ? settings.videoOpacity : settings.kawarpOpacity);
+    startVideoWatcher();
 
     logger.log("Mounted kawarp in the floating window");
     return true;

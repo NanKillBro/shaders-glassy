@@ -4,7 +4,7 @@ const SAMPLE_SIZE = 32;
 const HIGHLIGHT_PERCENTILE = 0.9;
 const MAX_TARGET_REDUCTION = 0.8;
 
-const measureHighlightLuminance = (rgbaPixels: Uint8ClampedArray): number => {
+export const measureHighlightLuminance = (rgbaPixels: Uint8ClampedArray): number => {
   const pixelCount = rgbaPixels.length / 4;
   if (pixelCount === 0) return 0;
 
