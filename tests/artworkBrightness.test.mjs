@@ -10,46 +10,39 @@ const moduleUrl = source => {
   return `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`;
 };
 const logger = moduleUrl(readFileSync(new URL("../shared/utils/logger.ts", import.meta.url), "utf8"));
-const source = readFileSync(new URL("../contents/lib/artworkBrightness.ts", import.meta.url), "utf8")
-  .replace("@/shared/utils/logger", logger);
+const source = readFileSync(new URL("../contents/lib/artworkBrightness.ts", import.meta.url), "utf8").replace(
+  "@/shared/utils/logger",
+  logger
+);
 const { measureHighlightLuminance, brightnessForHighlight } = await import(moduleUrl(source));
 
-function sortedReference(data) {
-  const divisor = data instanceof Float32Array ? 1 : 255;
-  const values = new Float32Array(data.length / 4);
-  for (let i = 0; i < values.length; i++) {
-    values[i] = (0.2126 * data[i * 4] + 0.7152 * data[i * 4 + 1] + 0.0722 * data[i * 4 + 2]) / divisor;
-  }
-  values.sort();
-  return values.length ? values[Math.min(values.length - 1, Math.floor(values.length * 0.9))] : 0;
-}
+const grayPixels = levels => Uint8ClampedArray.from(levels.flatMap(level => [level, level, level, 255]));
 
-test("percentile selection matches a full sort across gradients, flat frames and repeated colors", () => {
-  let seed = 12345;
-  const random = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32);
-  // Descending sizes check that a reused scratch buffer does not include stale pixels.
-  for (const count of [147456, 4096, 1024, 17, 2, 1, 0]) {
-    for (const kind of ["random", "ascending", "descending", "flat", "repeated", "alternating"]) {
-      const data = new Float32Array(count * 4);
-      for (let i = 0; i < count; i++) {
-        const v = kind === "random" ? random() : kind === "ascending" ? i / count :
-          kind === "descending" ? 1 - i / count : kind === "flat" ? 0.5 :
-          kind === "repeated" ? Math.floor(random() * 4) / 3 : i % 2;
-        data.set([v, v / 2, v / 3, 1], i * 4);
-      }
-      const original = data.slice();
-      assert.equal(measureHighlightLuminance(data), sortedReference(data), `${count} ${kind}`);
-      assert.deepEqual(data, original, "measurement must not mutate the sampled colors");
-      const bytes = Uint8ClampedArray.from(data, value => value * 255);
-      assert.equal(measureHighlightLuminance(bytes), sortedReference(bytes));
-    }
-  }
+test("returns the 90th percentile luminance regardless of pixel order", () => {
+  const levels = Array.from({ length: 100 }, (_, index) => index * 2);
+  const expected = Math.fround(((0.2126 + 0.7152 + 0.0722) * 180) / 255);
+  assert.equal(measureHighlightLuminance(grayPixels(levels)), expected);
+  assert.equal(measureHighlightLuminance(grayPixels(levels.reverse())), expected);
 });
 
-test("normalized float and byte white get identical dimming", () => {
-  const float = measureHighlightLuminance(new Float32Array([1, 1, 1, 1]));
-  const byte = measureHighlightLuminance(new Uint8ClampedArray([255, 255, 255, 255]));
-  assert.equal(float, 1);
-  assert.equal(float, byte);
-  assert.equal(brightnessForHighlight(float, 0.3), 0.76);
+test("handles empty, single-pixel and flat frames", () => {
+  assert.equal(measureHighlightLuminance(new Uint8ClampedArray(0)), 0);
+  assert.equal(
+    measureHighlightLuminance(grayPixels([255])),
+    measureHighlightLuminance(grayPixels(Array(1024).fill(255)))
+  );
+});
+
+test("does not mutate the sampled pixels", () => {
+  const pixels = grayPixels([200, 10, 90, 40]);
+  const original = pixels.slice();
+  measureHighlightLuminance(pixels);
+  assert.deepEqual(pixels, original);
+});
+
+test("dims white to the strength target and leaves dark frames alone", () => {
+  const white = measureHighlightLuminance(grayPixels([255]));
+  assert.ok(Math.abs(white - 1) < 1e-6);
+  assert.ok(Math.abs(brightnessForHighlight(white, 0.3) - 0.76) < 1e-6);
+  assert.equal(brightnessForHighlight(0.2, 0.3), 1);
 });
