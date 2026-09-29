@@ -7,6 +7,17 @@ interface Props extends SliderPanelProps {
   onToggleChange: (key: keyof GradientSettings, value: boolean) => void;
 }
 
+const FlashWarning: React.FC<{ open: boolean }> = ({ open }) => (
+  <div className={`flash-warning${open ? " flash-warning--open" : ""}`} aria-hidden={!open}>
+    <div className="flash-warning__clip">
+      <p className="flash-warning__text">
+        Flashes in the video will flash the whole background. If flashing light can trigger seizures for you, keep this
+        at {defaultSettings.videoColorResponse} ms or higher.
+      </p>
+    </div>
+  </div>
+);
+
 export const VideoTab: React.FC<Props> = ({ onToggleChange, ...props }) => (
   <div className="panel">
     <ControlToggle
@@ -18,12 +29,7 @@ export const VideoTab: React.FC<Props> = ({ onToggleChange, ...props }) => (
     <div className={props.settings.videoEnabled ? "" : "subgroup--disabled"}>
       <h3 className="video-section">Appearance</h3>
       <SliderPanel {...props} keys={["videoOpacity", "videoColorResponse"]} />
-      {props.settings.videoColorResponse < defaultSettings.videoColorResponse && (
-        <p className="flash-warning">
-          Flashes in the video will flash the whole background. If flashing light can trigger seizures for you, keep
-          this at {defaultSettings.videoColorResponse} ms or higher.
-        </p>
-      )}
+      <FlashWarning open={props.settings.videoColorResponse < defaultSettings.videoColorResponse} />
       <SliderPanel
         {...props}
         keys={["videoWarpIntensity", "videoBlurPasses", "videoSaturation", "videoDithering", "videoHdrDitheringScale"]}
