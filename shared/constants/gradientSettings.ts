@@ -68,7 +68,7 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoEnabled: true,
   videoOpacity: 1,
   videoWarpIntensity: 1,
-  videoBlurPasses: 7,
+  videoBlurPasses: 8,
   videoAnimationSpeed: 1,
   videoSaturation: 1.5,
   videoDithering: 0.008,
