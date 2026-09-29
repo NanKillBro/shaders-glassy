@@ -610,8 +610,7 @@ export function getAnimatedArtState(): AnimatedArtState {
   const video = getVideoElement();
   if (!video) return { active: false, videoUrl: null };
 
-  const source = video.querySelector("source");
-  return { active: true, videoUrl: source?.src ?? video.currentSrc ?? null };
+  return { active: true, videoUrl: video.currentSrc || video.getAttribute("src") };
 }
 
 export function pauseAnimatedArt(): void {
