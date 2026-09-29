@@ -262,12 +262,22 @@ const canSampleForState = (state: KawarpState): boolean =>
   state.isVisible &&
   state.container.ownerDocument.visibilityState === "visible";
 
-const videoSourceOptions = (settings: GradientSettings): KawarpVideoOptions => ({
+// Kawarp replaces every option on each loadVideo call, so the error handler must ride along each time.
+const videoSourceOptions = (
+  state: KawarpState,
+  video: HTMLVideoElement,
+  settings: GradientSettings
+): KawarpVideoOptions => ({
   sampleWidth: settings.videoSampleWidth,
   sampleHeight: settings.videoSampleHeight,
   downsampleFactor: settings.videoDownsampleFactor,
   frameRate: settings.videoFrameRate,
   smoothing: settings.videoColorResponse,
+  onError: error => {
+    logger.error("Video ambient colors unavailable for this source:", error);
+    state.failedVideoSrc = video.currentSrc;
+    if (state.videoSource === video) state.videoSource = null;
+  },
 });
 
 const findPlayableVideo = (): HTMLVideoElement | null => {
@@ -278,24 +288,18 @@ const findPlayableVideo = (): HTMLVideoElement | null => {
 
 const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: GradientSettings): void => {
   const instance = state.instance;
-  if (!instance || video.currentSrc === state.failedVideoSrc) return;
+  if (!instance) return;
   state.videoSource = video;
-  state.videoUnavailableSince = null;
   try {
-    instance.loadVideo(video, {
-      ...videoSourceOptions(settings),
-      onError: error => {
-        logger.error("Video ambient colors unavailable for this source:", error);
-        state.failedVideoSrc = video.currentSrc;
-        if (state.videoSource === video) state.videoSource = null;
-      },
-    });
+    instance.loadVideo(video, videoSourceOptions(state, video, settings));
   } catch (error) {
     logger.error("Video ambient colors unsupported:", error);
     state.failedVideoSrc = video.currentSrc;
     state.videoSource = null;
-    return;
   }
+  // The first frame imports synchronously, so a failure has already cleared videoSource.
+  if (state.videoSource !== video) return;
+  state.videoUnavailableSince = null;
   if (state.videoMode) return;
   state.videoMode = true;
   state.highlightLuminance = null;
@@ -304,7 +308,7 @@ const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: Grad
   applyArtworkBrightness(state);
   logger.log("Following player video", {
     canvas: state.container?.id,
-    floatSampling: instance.highPrecisionInput,
+    float32History: instance.highPrecisionInput,
     float16DrawingBuffer: instance.highPrecisionOutput,
   });
 };
@@ -320,7 +324,7 @@ const leaveVideoMode = (state: KawarpState, location: string): void => {
   state.videoUnavailableSince = null;
   applyModeSettings(state);
   const artwork = getAlbumArtUrl() ?? state.currentImageUrl;
-  if (artwork) void processImageTransition(state, artwork, location);
+  if (artwork) void resolveImageUrl(artwork).then(url => processImageTransition(state, url, location));
 };
 
 const sampleVideoBrightness = (state: KawarpState, now: number): void => {
@@ -357,10 +361,13 @@ const syncVideoSource = (
     return;
   }
 
-  if (playableVideo) {
-    if (state.videoSource !== playableVideo) followVideo(state, playableVideo, settings);
-    if (state.videoSource) sampleVideoBrightness(state, now);
-    return;
+  const followableVideo = playableVideo?.currentSrc === state.failedVideoSrc ? null : playableVideo;
+  if (followableVideo) {
+    if (state.videoSource !== followableVideo) followVideo(state, followableVideo, settings);
+    if (state.videoSource) {
+      sampleVideoBrightness(state, now);
+      return;
+    }
   }
 
   if (state.videoSource) stopFollowingVideo(state);
@@ -371,11 +378,13 @@ const syncVideoSource = (
 
 const syncVideoSources = (): void => {
   let videoWanted = false;
+  let anyVisible = false;
   for (const state of kawarps.values()) {
     if (state.lastSettings?.videoEnabled || state.videoMode) videoWanted = true;
+    if (canSampleForState(state)) anyVisible = true;
   }
   if (!videoWanted) return;
-  const playableVideo = findPlayableVideo();
+  const playableVideo = anyVisible ? findPlayableVideo() : null;
   const now = performance.now();
   for (const [location, state] of kawarps) syncVideoSource(state, location, playableVideo, now);
 };
@@ -917,7 +926,8 @@ export const updateKawarpSettings = (
     state.lastSettings = { ...settings };
     state.lastMultipliers = { ...multipliers };
     applyModeSettings(state);
-    if (state.videoSource) state.instance.loadVideo(state.videoSource, videoSourceOptions(settings));
+    if (state.videoSource)
+      state.instance.loadVideo(state.videoSource, videoSourceOptions(state, state.videoSource, settings));
     syncVideoSource(state, loc, settings.videoEnabled ? findPlayableVideo() : null, performance.now());
 
     applyArtworkBrightness(state, SETTING_CHANGE_FILTER_TRANSITION_MS);

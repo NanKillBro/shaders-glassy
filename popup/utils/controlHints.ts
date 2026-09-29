@@ -19,7 +19,7 @@ export const CONTROL_HINTS: Partial<Record<keyof GradientSettings, string>> = {
   videoBeatZoom: "Extra zoom on a detected beat, independent of the artwork scale boost.",
   videoZoomAttack: "How quickly zoom rises. Larger values respond more sharply.",
   videoZoomRelease: "How quickly zoom settles after a beat. Smaller values produce a longer release.",
-  videoSampleWidth: "Columns of sampled colors. Larger samples retain more detail and cost more to read back.",
+  videoSampleWidth: "Columns of sampled colors. Larger samples retain more detail and cost a little more GPU time.",
   videoSampleHeight: "Rows of sampled colors. Larger samples retain more detail.",
   videoFrameRate: "Maximum fresh captures per second. Zero follows decoded video frames.",
   videoColorResponse: "Smooth color changes over this time. Zero follows each sampled frame immediately.",

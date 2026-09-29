@@ -17,7 +17,7 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
-- **Video Ambient Colors**: During music videos, the background follows the video itself, with its own look and motion controls in the **Video** tab. Audio-only tracks, ads, and unreadable sources fall back to album artwork.
+- **Video Ambient Colors**: During music videos, the background follows the video itself, with its own look and motion controls in the **Video** tab. Audio-only tracks, ads, and videos the browser can't read fall back to album artwork.
 - **High-precision Output**: On HDR displays, supported browsers draw into a 16-bit floating-point canvas, which reduces banding in dark gradients. Brightness stays in the normal SDR range.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
@@ -36,7 +36,7 @@ The **Video** tab only affects music videos. **Look** and **Motion** still confi
 
 Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, optionally smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms, and stops while the video is paused. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
 
-With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether sampling uses float render targets.
+With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether color smoothing keeps float32 history.
 
 ## Installation
 
