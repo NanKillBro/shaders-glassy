@@ -1,5 +1,6 @@
 import { ARTWORK_API_ENDPOINT } from "@/shared/constants/artworkApi";
-import { ANIMATED_ART_VIDEO_ID } from "@/shared/constants/mediaElements";
+import { ANIMATED_ART_VIDEO_ID, ANIMATED_ART_VIDEO_SELECTOR } from "@/shared/constants/mediaElements";
+import { setCorsMediaSource } from "@/shared/utils/corsMediaSource";
 import { logger } from "@/shared/utils/logger";
 import { Storage } from "@plasmohq/storage";
 import browser from "webextension-polyfill";
@@ -350,10 +351,7 @@ function createVideoElement(videoUrl: string): HTMLVideoElement {
     { once: true }
   );
 
-  const source = document.createElement("source");
-  source.src = videoUrl;
-  source.type = "video/mp4";
-  video.appendChild(source);
+  setCorsMediaSource(video, videoUrl);
 
   return video;
 }
@@ -365,7 +363,7 @@ function injectAnimatedArt(videoUrl: string): void {
     return;
   }
 
-  const existingVideo = thumbnail.querySelector(`#${ANIMATED_ART_VIDEO_ID}`);
+  const existingVideo = thumbnail.querySelector(ANIMATED_ART_VIDEO_SELECTOR);
   if (existingVideo) {
     existingVideo.remove();
   }
@@ -378,7 +376,7 @@ function injectAnimatedArt(videoUrl: string): void {
 }
 
 function getVideoElement(): HTMLVideoElement | null {
-  return document.querySelector(`#${ANIMATED_ART_VIDEO_ID}`);
+  return document.querySelector(ANIMATED_ART_VIDEO_SELECTOR);
 }
 
 function removeAnimatedArt(): void {
@@ -612,8 +610,7 @@ export function getAnimatedArtState(): AnimatedArtState {
   const video = getVideoElement();
   if (!video) return { active: false, videoUrl: null };
 
-  const source = video.querySelector("source");
-  return { active: true, videoUrl: source?.src ?? video.currentSrc ?? null };
+  return { active: true, videoUrl: video.currentSrc || video.getAttribute("src") };
 }
 
 export function pauseAnimatedArt(): void {

@@ -5,6 +5,7 @@ import {
   type GradientSettings,
 } from "@/shared/constants/gradientSettings";
 import {
+  ANIMATED_ART_VIDEO_SELECTOR,
   PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR,
   PLAYER_VIDEO_SELECTOR,
   SONG_IMAGE_CONTAINER_SELECTOR,
@@ -284,10 +285,15 @@ const videoSourceOptions = (
   },
 });
 
+const isPlayable = (video: HTMLVideoElement | null): video is HTMLVideoElement =>
+  !!video && !video.error && video.videoWidth > 0;
+
 const findPlayableVideo = (): HTMLVideoElement | null => {
   if (isAdPlaying()) return null;
-  const video = document.querySelector<HTMLVideoElement>(PLAYER_VIDEO_SELECTOR);
-  return video && !video.error && video.videoWidth > 0 ? video : null;
+  const playerVideo = document.querySelector<HTMLVideoElement>(PLAYER_VIDEO_SELECTOR);
+  if (isPlayable(playerVideo)) return playerVideo;
+  const animatedArt = document.querySelector<HTMLVideoElement>(ANIMATED_ART_VIDEO_SELECTOR);
+  return isPlayable(animatedArt) ? animatedArt : null;
 };
 
 const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: GradientSettings): void => {
@@ -310,8 +316,9 @@ const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: Grad
   state.brightnessSampledAt = 0;
   applyModeSettings(state);
   applyArtworkBrightness(state);
-  logger.log("Following player video", {
+  logger.log("Following video", {
     canvas: state.container?.id,
+    source: video.id || "player",
     float32History: instance.highPrecisionInput,
     float16DrawingBuffer: instance.highPrecisionOutput,
   });
