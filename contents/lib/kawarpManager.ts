@@ -41,6 +41,7 @@ interface KawarpState {
   videoUnavailableSince: number | null;
   failedVideoSrc: string | null;
   brightnessSampledAt: number;
+  brightnessSampledTime: number;
   stopWatchingOutput: (() => void) | null;
 }
 
@@ -71,6 +72,7 @@ const createEmptyState = (): KawarpState => ({
   videoUnavailableSince: null,
   failedVideoSrc: null,
   brightnessSampledAt: 0,
+  brightnessSampledTime: -1,
   stopWatchingOutput: null,
 });
 
@@ -333,8 +335,11 @@ const sampleVideoBrightness = (state: KawarpState, now: number): void => {
   const video = state.videoSource;
   if (!instance || !settings?.autoDimBrightArtwork || !video) return;
   if (now - state.brightnessSampledAt < settings.videoBrightnessInterval) return;
-  if (video.paused && state.highlightLuminance !== null) return;
+  // A paused frame only changes after a seek, so re-measure once it has settled.
+  if (video.seeking) return;
+  if (video.paused && state.highlightLuminance !== null && video.currentTime === state.brightnessSampledTime) return;
   state.brightnessSampledAt = now;
+  state.brightnessSampledTime = video.currentTime;
   void instance.sampleSource(settings.videoBrightnessSampleSize).then(pixels => {
     if (!pixels || state.instance !== instance || !state.videoMode) return;
     state.highlightLuminance = measureHighlightLuminance(new Uint8ClampedArray(pixels.buffer));
@@ -1079,11 +1084,14 @@ export const createPipKawarp = async (
     watchOutputDisplay(state);
 
     if (imageUrl) {
+      state.isTransitioning = true;
       try {
         await loadArtwork(state, state.instance, imageUrl);
         state.currentImageUrl = imageUrl;
       } catch (error) {
         logger.error("Failed to load artwork for pip kawarp:", error);
+      } finally {
+        state.isTransitioning = false;
       }
     }
 

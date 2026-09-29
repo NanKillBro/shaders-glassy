@@ -34,7 +34,7 @@ The **Video** tab only affects music videos. **Look** and **Motion** still confi
 - **Motion:** animation speed, beat response, beat speed boost, beat zoom, and zoom attack and release. Beats come from the shared detector in **Audio**, but the video boost amounts are separate from the artwork ones.
 - **Sampling:** the size of the sampled color map (208 × 117 by default), a frame rate limit (0 follows the video), color smoothing, and how aggressively each downsampling step shrinks the frame.
 
-Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, optionally smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms, and stops while the video is paused. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
+Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, optionally smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms. While the video is paused it only measures again after a seek. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
 
 With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether color smoothing keeps float32 history.
 
