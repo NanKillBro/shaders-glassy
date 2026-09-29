@@ -62,7 +62,7 @@ const handleAudioResponsiveToggle = (): void => {
   }
 
   audioAnalysis.stopAudioAnalysis();
-  dynamicMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
+  dynamicMultipliers = { ...DEFAULT_DYNAMIC_MULTIPLIERS };
   kawarpManager.updateKawarpSpeed(gradientSettings, dynamicMultipliers);
 };
 

@@ -48,7 +48,7 @@ export interface GradientSettings {
 }
 
 export interface DynamicMultipliers {
-  isBeat?: boolean;
+  isBeat: boolean;
   speedMultiplier: number;
   scaleMultiplier: number;
 }
@@ -103,6 +103,7 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
 };
 
 export const DEFAULT_DYNAMIC_MULTIPLIERS: DynamicMultipliers = {
+  isBeat: false,
   speedMultiplier: 1,
   scaleMultiplier: 1,
 };

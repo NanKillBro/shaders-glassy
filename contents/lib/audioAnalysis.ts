@@ -33,6 +33,7 @@ const state: FacadeState = {
 const ELEMENT_POLL_MS = 1000;
 
 const reusableMultipliers: DynamicMultipliers = {
+  isBeat: false,
   speedMultiplier: 1,
   scaleMultiplier: 1,
 };

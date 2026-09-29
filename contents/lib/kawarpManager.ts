@@ -1,4 +1,5 @@
 import {
+  DEFAULT_DYNAMIC_MULTIPLIERS,
   DEFAULT_GRADIENT_SETTINGS,
   type DynamicMultipliers,
   type GradientSettings,
@@ -139,7 +140,7 @@ const applyModeSettings = (state: KawarpState, updateOpacity = true): void => {
   const settings = state.lastSettings;
   if (!state.instance || !settings) return;
   const video = isVideoMode(state);
-  const motion = modeMotion(state, settings, state.lastMultipliers ?? { speedMultiplier: 1, scaleMultiplier: 1 });
+  const motion = modeMotion(state, settings, state.lastMultipliers ?? DEFAULT_DYNAMIC_MULTIPLIERS);
   state.instance.setOptions({
     warpIntensity: video ? settings.videoWarpIntensity : settings.kawarpWarpIntensity,
     blurPasses: video ? settings.videoBlurPasses : settings.kawarpBlurPasses,
@@ -342,7 +343,9 @@ const sampleVideoBrightness = (state: KawarpState, now: number): void => {
   state.brightnessSampledTime = video.currentTime;
   void instance.sampleSource(settings.videoBrightnessSampleSize).then(pixels => {
     if (!pixels || state.instance !== instance || !state.videoMode) return;
-    state.highlightLuminance = measureHighlightLuminance(new Uint8ClampedArray(pixels.buffer));
+    state.highlightLuminance = measureHighlightLuminance(
+      new Uint8ClampedArray(pixels.buffer, pixels.byteOffset, pixels.byteLength)
+    );
     applyArtworkBrightness(state);
   });
 };
@@ -1007,11 +1010,7 @@ export const resumeKawarp = (location?: string): void => {
     state.instance.start();
 
     const settings = state.lastSettings ?? DEFAULT_GRADIENT_SETTINGS;
-    state.targetSpeed = modeMotion(
-      state,
-      settings,
-      state.lastMultipliers ?? { speedMultiplier: 1, scaleMultiplier: 1 }
-    ).speed;
+    state.targetSpeed = modeMotion(state, settings, state.lastMultipliers ?? DEFAULT_DYNAMIC_MULTIPLIERS).speed;
 
     if (state.speedAnimationId === null) {
       state.speedAnimationId = requestAnimationFrame(() => animateSpeed(state));

@@ -17,7 +17,7 @@ type AudioCommand =
 type AudioResult =
   | { type: "bls-audio-ready" }
   | { type: "bls-audio-initialized" }
-  | { type: "bls-audio-beat"; speedMultiplier: number; scaleMultiplier: number; isBeat?: boolean };
+  | { type: "bls-audio-beat"; speedMultiplier: number; scaleMultiplier: number; isBeat: boolean };
 
 const messageFields = (message: unknown): Record<string, unknown> | null => {
   if (typeof message !== "object" || message === null) return null;
@@ -67,7 +67,7 @@ const isAudioResult = (message: unknown): message is AudioResult => {
       return (
         isFiniteNumber(fields.speedMultiplier) &&
         isFiniteNumber(fields.scaleMultiplier) &&
-        (fields.isBeat === undefined || typeof fields.isBeat === "boolean")
+        typeof fields.isBeat === "boolean"
       );
     default:
       return false;
@@ -94,12 +94,12 @@ const audioResultFrom = (event: MessageEvent): AudioResult | null => {
 };
 
 interface BeatMultipliers {
-  isBeat?: boolean;
+  isBeat: boolean;
   speedMultiplier: number;
   scaleMultiplier: number;
 }
 
-const NEUTRAL_BEAT: BeatMultipliers = { speedMultiplier: 1, scaleMultiplier: 1 };
+const NEUTRAL_BEAT: BeatMultipliers = { isBeat: false, speedMultiplier: 1, scaleMultiplier: 1 };
 
 const clampToAuthorizedRange = (value: number, ceiling: number): number =>
   Math.min(Math.max(value, 1), Math.max(ceiling, 1));
@@ -107,7 +107,7 @@ const clampToAuthorizedRange = (value: number, ceiling: number): number =>
 const clampBeatMultipliers = (beat: BeatMultipliers, settings: AnalysisSettings | null): BeatMultipliers => {
   if (!settings) return NEUTRAL_BEAT;
   return {
-    isBeat: settings.audioResponsive && (beat.isBeat ?? (beat.speedMultiplier > 1 || beat.scaleMultiplier > 1)),
+    isBeat: settings.audioResponsive && beat.isBeat,
     speedMultiplier: clampToAuthorizedRange(beat.speedMultiplier, settings.audioSpeedMultiplier),
     scaleMultiplier: clampToAuthorizedRange(beat.scaleMultiplier, 1 + settings.kawarpAudioScaleBoost / 100),
   };
