@@ -1,4 +1,5 @@
 import { logger } from "@/shared/utils/logger";
+import { pageFetch } from "@/shared/utils/pageFetch";
 
 const SAMPLE_SIZE = 32;
 const HIGHLIGHT_PERCENTILE = 0.9;
@@ -26,7 +27,7 @@ export const brightnessForHighlight = (highlightLuminance: number, dimStrength: 
 
 export const measureArtworkHighlight = async (imageUrl: string): Promise<number | null> => {
   try {
-    const response = await fetch(imageUrl);
+    const response = await pageFetch(imageUrl);
     if (!response.ok) {
       logger.warn("Artwork brightness request failed:", response.status, imageUrl);
       return null;
