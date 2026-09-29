@@ -10,6 +10,7 @@ import {
   SONG_IMAGE_CONTAINER_SELECTOR,
 } from "@/shared/constants/mediaElements";
 import { logger } from "@/shared/utils/logger";
+import { pageFetch } from "@/shared/utils/pageFetch";
 import { videoMotion } from "@/shared/utils/videoSettings";
 import Kawarp, { type KawarpVideoOptions } from "@kawarp/core";
 import { isAdPlaying } from "./adState";
@@ -162,7 +163,7 @@ const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => 
   try {
     await instance.loadImage(url);
   } catch {
-    const response = await fetch(url);
+    const response = await pageFetch(url);
     const blob = await response.blob();
     const blobUrl = URL.createObjectURL(blob);
     try {

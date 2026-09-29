@@ -10,10 +10,10 @@ const moduleUrl = source => {
   return `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`;
 };
 const logger = moduleUrl(readFileSync(new URL("../shared/utils/logger.ts", import.meta.url), "utf8"));
-const source = readFileSync(new URL("../contents/lib/artworkBrightness.ts", import.meta.url), "utf8").replace(
-  "@/shared/utils/logger",
-  logger
-);
+const pageFetch = moduleUrl(readFileSync(new URL("../shared/utils/pageFetch.ts", import.meta.url), "utf8"));
+const source = readFileSync(new URL("../contents/lib/artworkBrightness.ts", import.meta.url), "utf8")
+  .replace("@/shared/utils/logger", logger)
+  .replace("@/shared/utils/pageFetch", pageFetch);
 const { measureHighlightLuminance, brightnessForHighlight } = await import(moduleUrl(source));
 
 const grayPixels = levels => Uint8ClampedArray.from(levels.flatMap(level => [level, level, level, 255]));
