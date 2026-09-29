@@ -294,8 +294,8 @@ const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: Grad
     instance.loadVideo(video, videoSourceOptions(state, video, settings));
   } catch (error) {
     logger.error("Video ambient colors unsupported:", error);
+    stopFollowingVideo(state);
     state.failedVideoSrc = video.currentSrc;
-    state.videoSource = null;
   }
   // The first frame imports synchronously, so a failure has already cleared videoSource.
   if (state.videoSource !== video) return;
@@ -363,7 +363,11 @@ const syncVideoSource = (
 
   const followableVideo = playableVideo?.currentSrc === state.failedVideoSrc ? null : playableVideo;
   if (followableVideo) {
-    if (state.videoSource !== followableVideo) followVideo(state, followableVideo, settings);
+    // An artwork load in flight would unload the video when it lands; follow once it settles.
+    if (state.videoSource !== followableVideo) {
+      if (state.isTransitioning) return;
+      followVideo(state, followableVideo, settings);
+    }
     if (state.videoSource) {
       sampleVideoBrightness(state, now);
       return;
