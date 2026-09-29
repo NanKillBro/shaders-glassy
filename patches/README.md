@@ -12,10 +12,9 @@ rendering or change the source video's color space.
 
 The extension requests this path on HDR displays and retains configured dithering
 by default. Video settings can optionally reduce dithering when high-precision
-output succeeds; moving to an SDR display restores normal dithering. The earlier
-25% default was too optimistic: drawing-buffer precision does not verify the
-browser compositor, OS, or monitor. The high-precision video sampler avoids byte rounding when supported, but this
-still cannot establish the precision of final display output.
+output succeeds; moving to an SDR display restores normal dithering. Drawing-buffer
+precision does not verify the browser compositor, OS, or monitor. The high-precision
+video sampler avoids byte rounding where supported.
 
 `tests/rendererPrecision.browser.ts` is a browser regression probe. Bundle it for
 the browser and call its exported `runRendererPrecisionChecks()`. It checks a
@@ -69,12 +68,9 @@ final RGBA16F copy without CPU color arrays. RGBA32F history uses nearest filter
 at matching resolution, so float-linear filtering support is unnecessary. The
 precision toggle uses RGBA8 for source/downsampling/output when disabled.
 
-DOM video imports deliberately use `texImage2D` on every new decoded frame,
-retaining the texture object. Do not apply the typed-array `texSubImage2D`
-optimization here: a live 1080p YouTube Music probe measured roughly 26 ms per
-`texSubImage2D` import versus 0.14 ms for `texImage2D` with the same RGBA16F format.
-Repeating the comparison on newly decoded frames reproduced the difference.
-The original synthetic canvas probe did not expose this video-specific slow path.
+DOM video imports use `texImage2D` on every new decoded frame, retaining the
+texture object and allowing the browser's accelerated video import path.
+Typed-array inputs use the separate `texSubImage2D` upload path.
 
 GPU processing requires WebGL2 and float render targets; initialization/import
 failures fall back to the existing CPU sampler. Browser video import can still
@@ -96,13 +92,12 @@ performance or FPS.
 
 `tests/decodedVideoPerformance.browser.ts` exports
 `runDecodedVideoPerformanceChecks(video, mode, iterations, width, height)`.
-Pass a playing decoder-backed HTMLVideoElement and `"gpu"`, `"cpu"`, or
-`"gpu-sub-upload"` (reproduces the slow import). Temporarily hide the installed
+Pass a playing decoder-backed HTMLVideoElement and `"gpu"` or `"cpu"`.
+Temporarily hide the installed
 shader container while running this additional renderer, restoring its display
 style in a `finally` block. The probe reports main-thread capture/submission time,
 GPU timer results where available, rAF intervals, and dropped video frames. It
-owns and disposes only its test renderer. A live 1080p comparison at 128×72
-measured about 31 ms of main-thread work for the old GPU path and 0.38 ms for
-the corrected path. These measurements exclude the later brightness callback;
+owns and disposes only its test renderer. A live 1080p source at 128×72 measured
+about 0.38 ms of main-thread work per GPU frame. This excludes the later brightness callback;
 rAF and GPU times depend on competing page/browser work. The probe canvas is
 offscreen, so this is not a measurement of final compositor presentation FPS.
