@@ -30,11 +30,13 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 
 The **Video** tab only affects music videos. **Look** and **Motion** still configure album artwork. Video settings are saved, exported, imported, and reset with everything else.
 
-- **Appearance:** opacity, warp strength, blur passes (0 skips the blur), saturation, dithering, and how much dithering to keep on an HDR display. **Dim bright frames** is the same toggle as the artwork setting, with its own strength, response time, and sampling rate for video.
-- **Motion:** animation speed, beat response, beat speed boost, beat zoom, and zoom attack and release. Beats come from the shared detector in **Audio**, but the video boost amounts are separate from the artwork ones.
-- **Sampling:** the size of the sampled color map (208 × 117 by default), a frame rate limit (0 follows the video), color smoothing, and how aggressively each downsampling step shrinks the frame.
+- **Appearance:** opacity, color smoothing, warp strength, blur passes (0 skips the blur), saturation, dithering, and how much dithering to keep on an HDR display. **Dim bright frames** is the same toggle as the artwork setting, with its own strength, response time, and sampling rate for video.
 
-Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, optionally smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms. While the video is paused it only measures again after a seek. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
+Color smoothing defaults to 250 ms. It blends color changes over time, so flashes and strobes in a video do not flash the whole background. Below 250 ms the popup shows a warning, because the background then follows flashing much more closely. Keep it at 250 ms or higher if flashing light can trigger seizures for you.
+- **Motion:** animation speed, beat response, beat speed boost, beat zoom, and zoom attack and release. Beats come from the shared detector in **Audio**, but the video boost amounts are separate from the artwork ones.
+- **Sampling:** the size of the sampled color map (208 × 117 by default), a frame rate limit (0 follows the video), and how aggressively each downsampling step shrinks the frame.
+
+Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms. While the video is paused it only measures again after a seek. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
 
 With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether color smoothing keeps float32 history.
 

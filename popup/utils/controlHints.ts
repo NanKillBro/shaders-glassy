@@ -22,7 +22,8 @@ export const CONTROL_HINTS: Partial<Record<keyof GradientSettings, string>> = {
   videoSampleWidth: "Columns of sampled colors. Larger samples retain more detail and cost a little more GPU time.",
   videoSampleHeight: "Rows of sampled colors. Larger samples retain more detail.",
   videoFrameRate: "Maximum fresh captures per second. Zero follows decoded video frames.",
-  videoColorResponse: "Smooth color changes over this time. Zero follows each sampled frame immediately.",
+  videoColorResponse:
+    "Blends color changes over this many milliseconds. Higher values soften flashes and strobes in the video.",
   videoDownsampleFactor:
     "Maximum shrink per downsampling stage. Smaller steps average fine detail more carefully; larger steps are cheaper.",
   kawarpOpacity:

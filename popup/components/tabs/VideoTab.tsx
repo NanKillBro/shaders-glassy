@@ -1,4 +1,4 @@
-import type { GradientSettings } from "@/popup/types";
+import { type GradientSettings, defaultSettings } from "@/popup/types";
 import React from "react";
 import { ControlToggle } from "../ControlToggle";
 import { SliderPanel, type SliderPanelProps } from "./SliderPanel";
@@ -17,16 +17,16 @@ export const VideoTab: React.FC<Props> = ({ onToggleChange, ...props }) => (
     />
     <div className={props.settings.videoEnabled ? "" : "subgroup--disabled"}>
       <h3 className="video-section">Appearance</h3>
+      <SliderPanel {...props} keys={["videoOpacity", "videoColorResponse"]} />
+      {props.settings.videoColorResponse < defaultSettings.videoColorResponse && (
+        <p className="flash-warning">
+          Flashes in the video will flash the whole background. If flashing light can trigger seizures for you, keep
+          this at {defaultSettings.videoColorResponse} ms or higher.
+        </p>
+      )}
       <SliderPanel
         {...props}
-        keys={[
-          "videoOpacity",
-          "videoWarpIntensity",
-          "videoBlurPasses",
-          "videoSaturation",
-          "videoDithering",
-          "videoHdrDitheringScale",
-        ]}
+        keys={["videoWarpIntensity", "videoBlurPasses", "videoSaturation", "videoDithering", "videoHdrDitheringScale"]}
       />
       <ControlToggle
         label="Dim bright frames"
@@ -62,13 +62,7 @@ export const VideoTab: React.FC<Props> = ({ onToggleChange, ...props }) => (
       <h3 className="video-section">Sampling</h3>
       <SliderPanel
         {...props}
-        keys={[
-          "videoSampleWidth",
-          "videoSampleHeight",
-          "videoFrameRate",
-          "videoColorResponse",
-          "videoDownsampleFactor",
-        ]}
+        keys={["videoSampleWidth", "videoSampleHeight", "videoFrameRate", "videoDownsampleFactor"]}
       />
     </div>
   </div>

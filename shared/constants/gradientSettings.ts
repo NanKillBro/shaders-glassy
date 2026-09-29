@@ -83,7 +83,7 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoSampleWidth: 208,
   videoSampleHeight: 117,
   videoFrameRate: 0,
-  videoColorResponse: 0,
+  videoColorResponse: 250,
   videoBrightnessSampleSize: 32,
   videoBrightnessInterval: 100,
   videoDownsampleFactor: 2,

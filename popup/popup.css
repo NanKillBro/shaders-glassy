@@ -815,3 +815,10 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+
+.flash-warning {
+  margin: 0 10px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #ffb547;
+}
