@@ -60,8 +60,8 @@ export interface DynamicMultipliers {
 
 export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   enabled: true,
-  // Kawarp defaults (matching @kawarp/core defaults)
-  kawarpOpacity: 0.75,
+  // Album artwork defaults
+  kawarpOpacity: 1,
   kawarpWarpIntensity: 1.0,
   kawarpBlurPasses: 8,
   kawarpAnimationSpeed: 1.0,
@@ -69,16 +69,16 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   kawarpSaturation: 1.5,
   kawarpDithering: 0.008,
   kawarpAudioScaleBoost: 2,
-  // Preserve the current video look; 0 FPS limit follows decoded frames.
+  // Video defaults; 0 FPS limit follows decoded frames.
   videoEnabled: true,
-  videoOpacity: 0.75,
-  videoWarpIntensity: 0.5,
-  videoBlurPasses: 3,
+  videoOpacity: 1,
+  videoWarpIntensity: 1,
+  videoBlurPasses: 7,
   videoAnimationSpeed: 1,
   videoSaturation: 1.5,
   videoDithering: 0.008,
   videoHdrDitheringScale: 1,
-  videoAutoDim: true,
+  videoAutoDim: false,
   videoDimStrength: 0.3,
   videoBrightnessTransition: 150,
   videoAudioResponsive: true,
@@ -86,11 +86,11 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoBeatZoom: 2,
   videoZoomAttack: 0.5,
   videoZoomRelease: 0.12,
-  videoSampleWidth: 128,
-  videoSampleHeight: 72,
+  videoSampleWidth: 208,
+  videoSampleHeight: 117,
   videoFrameRate: 0,
-  videoColorResponse: 65,
-  videoFrameTransition: 8,
+  videoColorResponse: 0,
+  videoFrameTransition: 11,
   videoStagedDownsampling: true,
   videoHighPrecisionSampling: true,
   videoGpuProcessing: true,

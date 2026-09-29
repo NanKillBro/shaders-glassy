@@ -17,7 +17,7 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
-- **Video Ambient Colors**: During music videos, colors follow decoded frames with independent controls in the **Video** tab. Defaults use a 128 × 72 sample, staged downsampling, brief temporal smoothing, three blur passes, and 0.5 warp intensity. Warp can range from zero to full strength while retaining beat-driven zoom. Audio-only or unreadable sources fall back to album artwork and your usual effect settings.
+- **Video Ambient Colors**: During music videos, colors follow decoded frames with independent controls in the **Video** tab. Defaults use a 208 × 117 sample, staged downsampling, seven blur passes, and full warp intensity. Temporal smoothing and bright-frame dimming are off; frame crossfades use 11 ms. Warp can range from zero to full strength while retaining beat-driven zoom. Audio-only or unreadable sources fall back to album artwork and your usual effect settings.
 - **High-precision Output**: On HDR displays, supported browsers use a 16-bit floating-point WebGL2 canvas with the configured dithering retained by default (adjustable for video). Brightness stays in the normal range. Other setups retain standard output and dithering.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
@@ -39,7 +39,7 @@ reset with the other settings.
 - **Motion:** animation speed, beat response, beat speed multiplier, zoom amount,
   and zoom attack/release. The shared detector must be enabled in **Audio**;
   video boost amounts are independent of artwork boost amounts.
-- **Sampling:** width and height (default 9,216 pixels per capture), FPS limit
+- **Sampling:** width and height (default 24,336 pixels per capture), FPS limit
   (0 follows decoded frames, with a 30 FPS polling fallback), color smoothing,
   frame crossfade, and staged downsampling with an adjustable reduction factor.
   **Process video on GPU**, enabled by default, imports video into a texture and
@@ -143,7 +143,7 @@ All settings are accessible from the extension popup with real-time preview.
 
 | Option              | Default | Range  | Description                                  |
 | ------------------- | ------- | ------ | -------------------------------------------- |
-| Opacity             | 0.75    | 0-1    | Visibility of the effect layer               |
+| Opacity             | 1       | 0-1    | Visibility of the effect layer               |
 | Warp Intensity      | 1.0     | 0-3    | How much the album art gets distorted        |
 | Blur Passes         | 8       | 1-16   | Softness of the background (more = dreamier) |
 | Animation Speed     | 1.0     | 0-3    | Speed of the fluid effect                    |

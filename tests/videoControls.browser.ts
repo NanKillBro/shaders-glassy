@@ -108,12 +108,12 @@ export async function runVideoControlsChecks(gpu = false, forceGpuFailure = fals
     const start = performance.now();
     while (uploads < 2 && performance.now() - start < 3000) await wait(50);
     check(
-      instance && uploads > 1 && width === 128 && height === 72,
+      instance && uploads > 1 && width === 208 && height === 117,
       `Default video sampling failed: ${JSON.stringify({ uploads, width, height, currentTime: video.currentTime, readyState: video.readyState, tick })}`
     );
     const renderer = instance!;
     check(floatUploads > 0 && renderer.highPrecisionSource, "Float video sampling/upload failed");
-    check(renderer.warpIntensity === 0.5 && renderer.blurPasses === 3, "Default video look failed");
+    check(renderer.warpIntensity === 1 && renderer.blurPasses === 7, "Default video look failed");
     update({
       videoWarpIntensity: 0.9,
       videoBlurPasses: 0,
