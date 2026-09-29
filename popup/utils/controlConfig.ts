@@ -6,8 +6,8 @@ export interface ControlConfig {
 
 export const getControlConfig = (key: string): ControlConfig => {
   const videoControls: Record<string, ControlConfig> = {
-    videoGpuBrightnessSize: { min: 8, max: 64, step: 8 },
-    videoGpuBrightnessInterval: { min: 0, max: 1000, step: 25 },
+    videoBrightnessSampleSize: { min: 8, max: 64, step: 8 },
+    videoBrightnessInterval: { min: 0, max: 1000, step: 25 },
     videoOpacity: { min: 0, max: 1, step: 0.01 },
     videoWarpIntensity: { min: 0, max: 1, step: 0.01 },
     videoBlurPasses: { min: 0, max: 40, step: 1 },
@@ -25,7 +25,6 @@ export const getControlConfig = (key: string): ControlConfig => {
     videoSampleHeight: { min: 9, max: 288, step: 9 },
     videoFrameRate: { min: 0, max: 120, step: 1 },
     videoColorResponse: { min: 0, max: 1000, step: 5 },
-    videoFrameTransition: { min: 0, max: 100, step: 1 },
     videoDownsampleFactor: { min: 1.25, max: 4, step: 0.25 },
   };
   if (videoControls[key]) return videoControls[key];

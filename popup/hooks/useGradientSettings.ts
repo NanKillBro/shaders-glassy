@@ -139,9 +139,13 @@ export const useGradientSettings = () => {
               ...validSettings
             } = importedSettings;
 
+            // Files exported by older builds may carry settings that no longer exist.
+            const knownSettings = Object.fromEntries(
+              Object.entries(validSettings).filter(([key]) => key in DEFAULT_GRADIENT_SETTINGS)
+            );
             const mergedImport: GradientSettings = {
               ...DEFAULT_GRADIENT_SETTINGS,
-              ...validSettings,
+              ...knownSettings,
             };
 
             const booleanKeys: (keyof GradientSettings)[] = [
@@ -153,11 +157,7 @@ export const useGradientSettings = () => {
               "enableAnimatedArt",
               "autoDimBrightArtwork",
               "videoEnabled",
-              "videoAutoDim",
               "videoAudioResponsive",
-              "videoStagedDownsampling",
-              "videoHighPrecisionSampling",
-              "videoGpuProcessing",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {

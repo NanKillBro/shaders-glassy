@@ -6,6 +6,3 @@ allowBuilds:
   lmdb: true
   msgpackr-extract: true
   sharp: true
-
-patchedDependencies:
-  '@kawarp/core@1.2.2': patches/@kawarp__core@1.2.2.patch

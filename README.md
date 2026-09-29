@@ -17,8 +17,8 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
-- **Video Ambient Colors**: During music videos, colors follow decoded frames with independent controls in the **Video** tab. Defaults use a 208 × 117 sample, staged downsampling, seven blur passes, and full warp intensity. Temporal smoothing and bright-frame dimming are off; frame crossfades use 11 ms. Warp can range from zero to full strength while retaining beat-driven zoom. Audio-only or unreadable sources fall back to album artwork and your usual effect settings.
-- **High-precision Output**: On HDR displays, supported browsers use a 16-bit floating-point WebGL2 canvas with the configured dithering retained by default (adjustable for video). Brightness stays in the normal range. Other setups retain standard output and dithering.
+- **Video Ambient Colors**: During music videos, the background follows the video itself, with its own look and motion controls in the **Video** tab. Audio-only tracks, ads, and videos the browser can't read fall back to album artwork.
+- **High-precision Output**: On HDR displays, supported browsers draw into a 16-bit floating-point canvas, which reduces banding in dark gradients. Brightness stays in the normal SDR range.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
 - **Real-time Configuration**: Adjust settings and see changes instantly via the popup
@@ -28,55 +28,15 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 
 ## Video controls
 
-The **Video** tab changes only the music-video background; **Look** and **Motion**
-continue to configure album artwork. Controls are saved, exported, imported, and
-reset with the other settings.
+The **Video** tab only affects music videos. **Look** and **Motion** still configure album artwork. Video settings are saved, exported, imported, and reset with everything else.
 
-- **Appearance:** opacity, direct warp strength, blur passes (0 bypasses shader
-  blur), saturation, dithering, and the fraction of dithering retained on an HDR
-  display with a working 16-bit canvas. Bright-frame dimming has its own strength
-  and response time.
-- **Motion:** animation speed, beat response, beat speed multiplier, zoom amount,
-  and zoom attack/release. The shared detector must be enabled in **Audio**;
-  video boost amounts are independent of artwork boost amounts.
-- **Sampling:** width and height (default 24,336 pixels per capture), FPS limit
-  (0 follows decoded frames, with a 30 FPS polling fallback), color smoothing,
-  frame crossfade, and staged downsampling with an adjustable reduction factor.
-  **Process video on GPU**, enabled by default, imports video into a texture and
-  keeps downsampling, temporal smoothing, blur, and warping on the GPU. It avoids
-  full-frame CPU readback. Auto-dimming reads a small brightness thumbnail
-  asynchronously (default 32 × 32, at most every 100 ms); its size and interval
-  are adjustable. This estimates brightness rather than examining every color-map
-  pixel. Disabling auto-dimming removes that readback too. Unsupported GPU paths
-  automatically use the CPU sampler; turn the GPU toggle off to compare them.
-  **High-precision colors**, enabled by default, uses float16 downsampling and
-  source textures plus float32 smoothing history. The CPU fallback uses float16
-  canvases/readback where supported. This retains intermediate shades without
-  making the image brighter. Unsupported CPU precision falls back to bytes. The toggle
-  applies live, including while paused; turning it off reduces memory/bandwidth.
-  Crossfades are capped to the observed capture interval; use color smoothing for
-  longer blends. Disabling staged downsampling is cheaper but can reintroduce
-  shimmer. Sampling settings also update while paused.
+- **Appearance:** opacity, warp strength, blur passes (0 skips the blur), saturation, dithering, and how much dithering to keep on an HDR display. **Dim bright frames** is the same toggle as the artwork setting, with its own strength, response time, and sampling rate for video.
+- **Motion:** animation speed, beat response, beat speed boost, beat zoom, and zoom attack and release. Beats come from the shared detector in **Audio**, but the video boost amounts are separate from the artwork ones.
+- **Sampling:** the size of the sampled color map (208 × 117 by default), a frame rate limit (0 follows the video), color smoothing, and how aggressively each downsampling step shrinks the frame.
 
-Each canvas logs `[BLS] Canvas HDR/precision detection` to the page console when
-created and when the display's dynamic-range capability changes, even with
-verbose logging disabled. `hdrDisplayDetected` reports the display query;
-`float16DrawingBuffer` reports successful high-precision canvas output;
-`hdrPrecisionActive` requires both. `extendedRangeOutput` remains false: this
-improves blending precision within SDR-range sRGB, not brightness above white.
-`compositorPrecisionVerified` is false because this detection cannot verify the
-precision of browser compositing, OS output, or the monitor. Float16 canvas
-support alone does not establish that less dithering is sufficient. If bands are visible, keep **HDR dither amount** at
-100% and start with **Dithering** at 0.008. Existing saved values are preserved;
-reset that individual control to pick up the new default.
+Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, optionally smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms. While the video is paused it only measures again after a seek. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
 
-`[BLS] Video color precision` reports the active video path when entering video
-mode or changing precision. On a fully supported setup it shows `processing:
-"gpu"`, `sampling: "float16"`, `smoothing: "float32"`, `sourceTexture: "rgba16f"`,
-and `fullFrameReadback: false`. The CPU path reports `processing: "cpu"` and
-`smoothingUpload` instead. A fallback
-includes its reason. The source video can still contain banding, and final
-compositing/output precision remains unverified, so dithering stays enabled.
+With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether color smoothing keeps float32 history.
 
 ## Installation
 
@@ -143,7 +103,7 @@ All settings are accessible from the extension popup with real-time preview.
 
 | Option              | Default | Range  | Description                                  |
 | ------------------- | ------- | ------ | -------------------------------------------- |
-| Opacity             | 1       | 0-1    | Visibility of the effect layer               |
+| Opacity             | 0.75    | 0-1    | Visibility of the effect layer               |
 | Warp Intensity      | 1.0     | 0-3    | How much the album art gets distorted        |
 | Blur Passes         | 8       | 1-16   | Softness of the background (more = dreamier) |
 | Animation Speed     | 1.0     | 0-3    | Speed of the fluid effect                    |

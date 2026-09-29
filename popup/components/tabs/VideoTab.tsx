@@ -30,12 +30,20 @@ export const VideoTab: React.FC<Props> = ({ onToggleChange, ...props }) => (
       />
       <ControlToggle
         label="Dim bright frames"
-        hint="Keep lyrics readable over bright video colors."
-        value={props.settings.videoAutoDim}
-        onChange={value => onToggleChange("videoAutoDim", value)}
+        hint="Keep lyrics readable over bright video colors. Shared with the artwork setting."
+        value={props.settings.autoDimBrightArtwork}
+        onChange={value => onToggleChange("autoDimBrightArtwork", value)}
       />
-      <div className={props.settings.videoAutoDim ? "subgroup" : "subgroup subgroup--disabled"}>
-        <SliderPanel {...props} keys={["videoDimStrength", "videoBrightnessTransition"]} />
+      <div className={props.settings.autoDimBrightArtwork ? "subgroup" : "subgroup subgroup--disabled"}>
+        <SliderPanel
+          {...props}
+          keys={[
+            "videoDimStrength",
+            "videoBrightnessTransition",
+            "videoBrightnessSampleSize",
+            "videoBrightnessInterval",
+          ]}
+        />
       </div>
       <h3 className="video-section">Motion</h3>
       <SliderPanel {...props} keys={["videoAnimationSpeed"]} />
@@ -52,38 +60,16 @@ export const VideoTab: React.FC<Props> = ({ onToggleChange, ...props }) => (
         />
       </div>
       <h3 className="video-section">Sampling</h3>
-      <ControlToggle
-        label="Process video on GPU"
-        hint="Keep color frames in GPU textures. Falls back to CPU sampling when unsupported."
-        value={props.settings.videoGpuProcessing}
-        onChange={value => onToggleChange("videoGpuProcessing", value)}
-      />
-      <div
-        className={
-          props.settings.videoGpuProcessing && props.settings.videoAutoDim ? "subgroup" : "subgroup subgroup--disabled"
-        }
-      >
-        <SliderPanel {...props} keys={["videoGpuBrightnessSize", "videoGpuBrightnessInterval"]} />
-      </div>
-      <ControlToggle
-        label="High-precision colors"
-        hint="Preserve fractional colors through sampling and blending. Uses float16 where supported, with an 8-bit fallback. Uses more memory and bandwidth."
-        value={props.settings.videoHighPrecisionSampling}
-        onChange={value => onToggleChange("videoHighPrecisionSampling", value)}
-      />
       <SliderPanel
         {...props}
-        keys={["videoSampleWidth", "videoSampleHeight", "videoFrameRate", "videoColorResponse", "videoFrameTransition"]}
+        keys={[
+          "videoSampleWidth",
+          "videoSampleHeight",
+          "videoFrameRate",
+          "videoColorResponse",
+          "videoDownsampleFactor",
+        ]}
       />
-      <ControlToggle
-        label="Staged downsampling"
-        hint="Reduce the video in smaller steps to prevent flickering fine detail. Turn off for a cheaper single resize."
-        value={props.settings.videoStagedDownsampling}
-        onChange={value => onToggleChange("videoStagedDownsampling", value)}
-      />
-      <div className={props.settings.videoStagedDownsampling ? "subgroup" : "subgroup subgroup--disabled"}>
-        <SliderPanel {...props} keys={["videoDownsampleFactor"]} />
-      </div>
     </div>
   </div>
 );

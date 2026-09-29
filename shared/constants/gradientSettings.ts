@@ -9,7 +9,7 @@ export interface GradientSettings {
   kawarpSaturation: number;
   kawarpDithering: number;
   kawarpAudioScaleBoost: number;
-  // Video ambient mode (independent of album artwork settings)
+  // Video ambient mode (independent of album artwork settings; dimming follows autoDimBrightArtwork)
   videoEnabled: boolean;
   videoOpacity: number;
   videoWarpIntensity: number;
@@ -18,7 +18,6 @@ export interface GradientSettings {
   videoSaturation: number;
   videoDithering: number;
   videoHdrDitheringScale: number;
-  videoAutoDim: boolean;
   videoDimStrength: number;
   videoBrightnessTransition: number;
   videoAudioResponsive: boolean;
@@ -30,12 +29,8 @@ export interface GradientSettings {
   videoSampleHeight: number;
   videoFrameRate: number;
   videoColorResponse: number;
-  videoFrameTransition: number;
-  videoStagedDownsampling: boolean;
-  videoHighPrecisionSampling: boolean;
-  videoGpuProcessing: boolean;
-  videoGpuBrightnessSize: number;
-  videoGpuBrightnessInterval: number;
+  videoBrightnessSampleSize: number;
+  videoBrightnessInterval: number;
   videoDownsampleFactor: number;
   // Bright artwork
   autoDimBrightArtwork: boolean;
@@ -60,8 +55,8 @@ export interface DynamicMultipliers {
 
 export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   enabled: true,
-  // Album artwork defaults
-  kawarpOpacity: 1,
+  // Kawarp defaults (matching @kawarp/core defaults)
+  kawarpOpacity: 0.75,
   kawarpWarpIntensity: 1.0,
   kawarpBlurPasses: 8,
   kawarpAnimationSpeed: 1.0,
@@ -78,7 +73,6 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoSaturation: 1.5,
   videoDithering: 0.008,
   videoHdrDitheringScale: 1,
-  videoAutoDim: false,
   videoDimStrength: 0.3,
   videoBrightnessTransition: 150,
   videoAudioResponsive: true,
@@ -90,12 +84,8 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoSampleHeight: 117,
   videoFrameRate: 0,
   videoColorResponse: 0,
-  videoFrameTransition: 11,
-  videoStagedDownsampling: true,
-  videoHighPrecisionSampling: true,
-  videoGpuProcessing: true,
-  videoGpuBrightnessSize: 32,
-  videoGpuBrightnessInterval: 100,
+  videoBrightnessSampleSize: 32,
+  videoBrightnessInterval: 100,
   videoDownsampleFactor: 2,
   // Bright artwork
   autoDimBrightArtwork: true,
