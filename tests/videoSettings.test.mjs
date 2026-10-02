@@ -15,6 +15,10 @@ const { DEFAULT_GRADIENT_SETTINGS } = await load("../shared/constants/gradientSe
 test("video beats retain independent speed and zoom when artwork boosts are neutral", () => {
   const settings = {
     ...DEFAULT_GRADIENT_SETTINGS,
+    // Pinned rather than inherited: this fork ships audio-reactive off by default,
+    // and this test is about the beat math, not about what the defaults are.
+    audioResponsive: true,
+    videoAudioResponsive: true,
     videoAnimationSpeed: 0.5,
     videoBeatSpeedMultiplier: 3,
     videoBeatZoom: 7,
