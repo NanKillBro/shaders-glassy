@@ -4,6 +4,26 @@ export const capitalizeFirst = (str: string): string => {
 
 export const getControlLabel = (key: string): string => {
   const labels: Record<string, string> = {
+    videoBrightnessSampleSize: "Brightness sample size",
+    videoBrightnessInterval: "Brightness check interval",
+    videoOpacity: "Opacity",
+    videoWarpIntensity: "Warp intensity",
+    videoBlurPasses: "Blur passes",
+    videoAnimationSpeed: "Animation speed",
+    videoSaturation: "Saturation",
+    videoDithering: "Dithering",
+    videoHdrDitheringScale: "HDR dither amount",
+    videoDimStrength: "Dim strength",
+    videoBrightnessTransition: "Dim response",
+    videoBeatSpeedMultiplier: "Beat speed boost",
+    videoBeatZoom: "Beat zoom",
+    videoZoomAttack: "Zoom attack",
+    videoZoomRelease: "Zoom release",
+    videoSampleWidth: "Sample width",
+    videoSampleHeight: "Sample height",
+    videoFrameRate: "Capture limit",
+    videoColorResponse: "Color smoothing",
+    videoDownsampleFactor: "Downsample step",
     kawarpOpacity: "Opacity",
     kawarpWarpIntensity: "Warp intensity",
     kawarpBlurPasses: "Blur passes",
@@ -14,6 +34,7 @@ export const getControlLabel = (key: string): string => {
     audioBeatThreshold: "Beat threshold",
     audioSpeedMultiplier: "Speed multiplier",
     kawarpAudioScaleBoost: "Scale boost",
+    autoDimStrength: "Dim strength",
   };
 
   return labels[key] || capitalizeFirst(key);

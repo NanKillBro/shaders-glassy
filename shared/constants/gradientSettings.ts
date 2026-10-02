@@ -9,6 +9,32 @@ export interface GradientSettings {
   kawarpSaturation: number;
   kawarpDithering: number;
   kawarpAudioScaleBoost: number;
+  // Video ambient mode (independent of album artwork settings; dimming follows autoDimBrightArtwork)
+  videoEnabled: boolean;
+  videoOpacity: number;
+  videoWarpIntensity: number;
+  videoBlurPasses: number;
+  videoAnimationSpeed: number;
+  videoSaturation: number;
+  videoDithering: number;
+  videoHdrDitheringScale: number;
+  videoDimStrength: number;
+  videoBrightnessTransition: number;
+  videoAudioResponsive: boolean;
+  videoBeatSpeedMultiplier: number;
+  videoBeatZoom: number;
+  videoZoomAttack: number;
+  videoZoomRelease: number;
+  videoSampleWidth: number;
+  videoSampleHeight: number;
+  videoFrameRate: number;
+  videoColorResponse: number;
+  videoBrightnessSampleSize: number;
+  videoBrightnessInterval: number;
+  videoDownsampleFactor: number;
+  // Bright artwork
+  autoDimBrightArtwork: boolean;
+  autoDimStrength: number;
   // Audio responsive
   audioResponsive: boolean;
   audioSpeedMultiplier: number;
@@ -22,6 +48,7 @@ export interface GradientSettings {
 }
 
 export interface DynamicMultipliers {
+  isBeat: boolean;
   speedMultiplier: number;
   scaleMultiplier: number;
 }
@@ -37,6 +64,32 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   kawarpSaturation: 2,
   kawarpDithering: 0.008,
   kawarpAudioScaleBoost: 2,
+  // Video defaults; 0 FPS limit follows decoded frames.
+  videoEnabled: true,
+  videoOpacity: 1,
+  videoWarpIntensity: 1,
+  videoBlurPasses: 8,
+  videoAnimationSpeed: 1,
+  videoSaturation: 1.5,
+  videoDithering: 0.008,
+  videoHdrDitheringScale: 1,
+  videoDimStrength: 0.3,
+  videoBrightnessTransition: 150,
+  videoAudioResponsive: true,
+  videoBeatSpeedMultiplier: 4,
+  videoBeatZoom: 2,
+  videoZoomAttack: 0.5,
+  videoZoomRelease: 0.12,
+  videoSampleWidth: 208,
+  videoSampleHeight: 117,
+  videoFrameRate: 0,
+  videoColorResponse: 250,
+  videoBrightnessSampleSize: 32,
+  videoBrightnessInterval: 100,
+  videoDownsampleFactor: 2,
+  // Bright artwork
+  autoDimBrightArtwork: true,
+  autoDimStrength: 0.3,
   // Audio responsive
   audioResponsive: false,
   audioSpeedMultiplier: 2,
@@ -50,6 +103,7 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
 };
 
 export const DEFAULT_DYNAMIC_MULTIPLIERS: DynamicMultipliers = {
+  isBeat: false,
   speedMultiplier: 1,
   scaleMultiplier: 1,
 };

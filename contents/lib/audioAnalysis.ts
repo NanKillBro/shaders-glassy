@@ -33,6 +33,7 @@ const state: FacadeState = {
 const ELEMENT_POLL_MS = 1000;
 
 const reusableMultipliers: DynamicMultipliers = {
+  isBeat: false,
   speedMultiplier: 1,
   scaleMultiplier: 1,
 };
@@ -114,6 +115,7 @@ window.addEventListener("message", event => {
     }
     case "bls-audio-beat": {
       const bounded = clampBeatMultipliers(message, state.authorizedSettings);
+      reusableMultipliers.isBeat = bounded.isBeat;
       reusableMultipliers.speedMultiplier = bounded.speedMultiplier;
       reusableMultipliers.scaleMultiplier = bounded.scaleMultiplier;
       state.onBeatDetected?.(reusableMultipliers);

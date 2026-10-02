@@ -19,12 +19,28 @@ A browser extension that adds beautiful animated backgrounds to YouTube Music us
 ## Features
 
 - **Fluid Animated Backgrounds**: Album artwork transforms into smooth, warped visuals using Kawarp
+- **Video Ambient Colors**: During music videos, the background follows the video itself, with its own look and motion controls in the **Video** tab. Audio-only tracks, ads, and videos the browser can't read fall back to album artwork.
+- **High-precision Output**: On HDR displays, supported browsers draw into a 16-bit floating-point canvas, which reduces banding in dark gradients. Brightness stays in the normal SDR range.
 - **Animated Album Art**: Displays animated album artwork (video loops) when available
 - **Audio Reactive**: Beat detection syncs effects with music for a pulsing, dynamic experience
 - **Real-time Configuration**: Adjust settings and see changes instantly via the popup
 - **Persistent Settings**: Configuration saved automatically across sessions
 - **Multi-page Support**: Works on player pages, homepage, and search results
 - **Cross-browser**: Supports Chrome, Firefox, Edge, Brave, Arc, and other Chromium browsers
+
+## Video controls
+
+The **Video** tab only affects music videos. **Look** and **Motion** still configure album artwork. Video settings are saved, exported, imported, and reset with everything else.
+
+- **Appearance:** opacity, color smoothing, warp strength, blur passes (0 skips the blur), saturation, dithering, and how much dithering to keep on an HDR display. **Dim bright frames** is the same toggle as the artwork setting, with its own strength, response time, and sampling rate for video.
+
+Color smoothing defaults to 250 ms. It blends color changes over time, so flashes and strobes in a video do not flash the whole background. Below 250 ms the popup shows a warning, because the background then follows flashing much more closely. Keep it at 250 ms or higher if flashing light can trigger seizures for you.
+- **Motion:** animation speed, beat response, beat speed boost, beat zoom, and zoom attack and release. Beats come from the shared detector in **Audio**, but the video boost amounts are separate from the artwork ones.
+- **Sampling:** the size of the sampled color map (208 × 117 by default), a frame rate limit (0 follows the video), and how aggressively each downsampling step shrinks the frame.
+
+Kawarp does the video work on the GPU: each decoded frame is shrunk in steps, smoothed over time, and blurred, without reading full frames back to JavaScript. Dimming reads a 32 × 32 thumbnail asynchronously, at most every 100 ms. While the video is paused it only measures again after a seek. If the video stops being readable for more than a moment, the background crossfades back to the album artwork.
+
+With logging enabled, each canvas reports whether it got a float16 drawing buffer and, in video mode, whether color smoothing keeps float32 history.
 
 ## Installation
 
@@ -44,13 +60,13 @@ Use the download links above to install from Chrome Web Store or Firefox Add-ons
 2. Install dependencies
 
    ```bash
-   bun install
+   pnpm install
    ```
 
 3. Build the extension
 
    ```bash
-   bun run build
+   pnpm build
    ```
 
 4. Load in your browser
@@ -62,9 +78,9 @@ Use the download links above to install from Chrome Web Store or Firefox Add-ons
 For development with hot reload:
 
 ```bash
-bun run dev          # Chrome
-bun run dev:firefox  # Firefox
-bun run dev:edge     # Edge
+pnpm dev          # Chrome
+pnpm dev:firefox  # Firefox
+pnpm dev:edge     # Edge
 ```
 
 ## Usage
@@ -116,8 +132,8 @@ Settings can be exported to JSON and imported on other devices or browsers.
 ## Building for Production
 
 ```bash
-bun run build    # Build for all browsers (Chrome, Firefox, Edge)
-bun run package  # Package for distribution
+pnpm build    # Build for all browsers (Chrome, Firefox, Edge)
+pnpm package  # Package for distribution
 ```
 
 Build outputs:

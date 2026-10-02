@@ -1,5 +1,5 @@
 (function () {
-  let lastVideoId = null;
+  let lastVideoKey = null;
 
   setInterval(() => {
     const player = document.getElementById("movie_player");
@@ -9,10 +9,11 @@
       const { video_id, title, author } = player.getVideoData();
       const duration = player.getDuration();
 
-      if (!video_id || !title) return;
+      if (!video_id) return;
 
-      if (video_id !== lastVideoId) {
-        lastVideoId = video_id;
+      const videoKey = `${video_id}|${title}`;
+      if (videoKey !== lastVideoKey) {
+        lastVideoKey = videoKey;
         document.dispatchEvent(
           new CustomEvent("bls-send-player-time", {
             detail: {

@@ -4,3 +4,4 @@ export { ExtrasTab } from "./ExtrasTab";
 export { GeneralTab } from "./GeneralTab";
 export { LookTab } from "./LookTab";
 export { MotionTab } from "./MotionTab";
+export { VideoTab } from "./VideoTab";

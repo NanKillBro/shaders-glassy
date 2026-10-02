@@ -1,9 +1,11 @@
+import { ARTWORK_API_ENDPOINT } from "@/shared/constants/artworkApi";
+import { ANIMATED_ART_VIDEO_ID, ANIMATED_ART_VIDEO_SELECTOR } from "@/shared/constants/mediaElements";
+import { setCorsMediaSource } from "@/shared/utils/corsMediaSource";
+import { logger } from "@/shared/utils/logger";
 import { Storage } from "@plasmohq/storage";
 import browser from "webextension-polyfill";
-import { ANIMATED_ART_VIDEO_ID } from "@/shared/constants/mediaElements";
-import { logger } from "@/shared/utils/logger";
+import { getToken } from "./artworkToken";
 
-const API_ENDPOINT = "https://artwork.boidu.dev";
 const NOT_FOUND_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const ALLOWED_VIDEO_HOSTS = new Set(["mvod.itunes.apple.com"]);
 
@@ -302,10 +304,11 @@ async function fetchArtworkUrl(
     al: album,
   });
 
-  const url = `${API_ENDPOINT}?${params.toString()}`;
+  const url = `${ARTWORK_API_ENDPOINT}?${params.toString()}`;
 
   try {
-    const response = await fetch(url, { signal });
+    const token = await getToken();
+    const response = await fetch(url, token ? { signal, headers: { Authorization: `Bearer ${token}` } } : { signal });
 
     if (!response.ok) {
       logger.log("Animated art: API error", response.status);
@@ -352,10 +355,7 @@ function createVideoElement(videoUrl: string): HTMLVideoElement {
     { once: true }
   );
 
-  const source = document.createElement("source");
-  source.src = videoUrl;
-  source.type = "video/mp4";
-  video.appendChild(source);
+  setCorsMediaSource(video, videoUrl);
 
   return video;
 }
@@ -367,7 +367,7 @@ function injectAnimatedArt(videoUrl: string): void {
     return;
   }
 
-  const existingVideo = thumbnail.querySelector(`#${ANIMATED_ART_VIDEO_ID}`);
+  const existingVideo = thumbnail.querySelector(ANIMATED_ART_VIDEO_SELECTOR);
   if (existingVideo) {
     existingVideo.remove();
   }
@@ -394,7 +394,7 @@ function injectAnimatedArt(videoUrl: string): void {
 }
 
 function getVideoElement(): HTMLVideoElement | null {
-  return document.querySelector(`#${ANIMATED_ART_VIDEO_ID}`);
+  return document.querySelector(ANIMATED_ART_VIDEO_SELECTOR);
 }
 
 // ── Crossfade utilities ──
@@ -488,7 +488,7 @@ async function tryFetchArtwork(): Promise<void> {
 
   const { videoId, song, artist, duration } = currentPlayerData;
 
-  if (videoId === lastProcessedVideoId) return;
+  if (!song || videoId === lastProcessedVideoId) return;
 
   lastProcessedVideoId = videoId;
 
@@ -708,8 +708,7 @@ export function getAnimatedArtState(): AnimatedArtState {
   const video = getVideoElement();
   if (!video) return { active: false, videoUrl: null };
 
-  const source = video.querySelector("source");
-  return { active: true, videoUrl: source?.src ?? video.currentSrc ?? null };
+  return { active: true, videoUrl: video.currentSrc || video.getAttribute("src") };
 }
 
 export function pauseAnimatedArt(): void {

@@ -14,6 +14,7 @@ import {
   NowPlaying,
   TabBar,
   ThemeLockNotice,
+  VideoTab,
 } from "./components";
 import { useContentScript, useGradientSettings, useTabState } from "./hooks";
 import { GradientSettings, SettingsTab, defaultSettings } from "./types";
@@ -66,8 +67,9 @@ const Popup: React.FC = () => {
 
   const panels: Record<SettingsTab, React.ReactNode> = {
     general: <GeneralTab settings={gradientSettings} onToggleChange={handleToggleChange} locked={isLocked} />,
-    look: <LookTab {...sliderProps} />,
+    look: <LookTab {...sliderProps} onToggleChange={handleToggleChange} />,
     motion: <MotionTab {...sliderProps} />,
+    video: <VideoTab {...sliderProps} onToggleChange={handleToggleChange} />,
     audio: <AudioTab {...sliderProps} onToggleChange={handleToggleChange} />,
     // Debug logs and the artwork cache tools stay usable for troubleshooting.
     extras: <ExtrasTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
