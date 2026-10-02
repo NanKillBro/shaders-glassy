@@ -23,6 +23,7 @@ export const LookTab: React.FC<LookTabProps> = ({ onToggleChange, ...sliderProps
       hint="Darken white and very bright covers so the lyrics stay readable."
       value={sliderProps.settings.autoDimBrightArtwork}
       onChange={value => onToggleChange("autoDimBrightArtwork", value)}
+      disabled={sliderProps.locked}
     />
     <div className={`subgroup${sliderProps.settings.autoDimBrightArtwork ? "" : " subgroup--disabled"}`}>
       <SliderPanel keys={["autoDimStrength"]} {...sliderProps} />

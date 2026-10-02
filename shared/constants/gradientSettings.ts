@@ -75,7 +75,7 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   videoHdrDitheringScale: 1,
   videoDimStrength: 0.3,
   videoBrightnessTransition: 150,
-  videoAudioResponsive: true,
+  videoAudioResponsive: false,
   videoBeatSpeedMultiplier: 4,
   videoBeatZoom: 2,
   videoZoomAttack: 0.5,
