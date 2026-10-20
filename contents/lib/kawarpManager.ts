@@ -46,6 +46,10 @@ interface KawarpState {
   brightnessSampledAt: number;
   brightnessSampledTime: number;
   stopWatchingOutput: (() => void) | null;
+  // Set only for the floating-window instance: Kawarp schedules its loop on the realm that
+  // constructed it (this content script's window), which stops when the main window is minimized.
+  pipWindow: Window | null;
+  pipAnimationId: number | null;
 }
 
 const createEmptyState = (): KawarpState => ({
@@ -77,6 +81,8 @@ const createEmptyState = (): KawarpState => ({
   brightnessSampledAt: 0,
   brightnessSampledTime: -1,
   stopWatchingOutput: null,
+  pipWindow: null,
+  pipAnimationId: null,
 });
 
 const SCALE_LERP_UP = 0.5;
@@ -244,7 +250,7 @@ const animateSpeed = (state: KawarpState): void => {
     state.instance.animationSpeed = state.currentSpeed;
     state.speedAnimationId = null;
     if (state.currentSpeed === 0) {
-      state.instance.stop();
+      stopKawarpLoop(state);
     }
     return;
   }
@@ -254,6 +260,54 @@ const animateSpeed = (state: KawarpState): void => {
   state.instance.animationSpeed = state.currentSpeed;
 
   state.speedAnimationId = requestAnimationFrame(() => animateSpeed(state));
+};
+
+interface KawarpLoopInternals {
+  animationId: number | null;
+}
+
+const startPipLoop = (state: KawarpState, pipWindow: Window): void => {
+  if (!state.instance) return;
+
+  state.pipWindow = pipWindow;
+  // start() primes lastFrameTime and wakes video-frame callbacks. Cancel only the loop it
+  // scheduled on this (opener) window; isPlaying must stay true for video sampling.
+  state.instance.start();
+  const internals = state.instance as unknown as KawarpLoopInternals;
+  if (internals.animationId !== null) {
+    cancelAnimationFrame(internals.animationId);
+    internals.animationId = null;
+  }
+
+  if (state.pipAnimationId !== null) pipWindow.cancelAnimationFrame(state.pipAnimationId);
+
+  const tick = (): void => {
+    if (!state.instance || state.pipWindow !== pipWindow || state.isPaused) {
+      state.pipAnimationId = null;
+      return;
+    }
+    state.instance.renderFrame();
+    state.pipAnimationId = pipWindow.requestAnimationFrame(tick);
+  };
+
+  state.pipAnimationId = pipWindow.requestAnimationFrame(tick);
+};
+
+const stopKawarpLoop = (state: KawarpState): void => {
+  if (state.pipAnimationId !== null && state.pipWindow) {
+    state.pipWindow.cancelAnimationFrame(state.pipAnimationId);
+  }
+  state.pipAnimationId = null;
+  state.instance?.stop();
+};
+
+const startKawarpLoop = (state: KawarpState, location: string): void => {
+  if (!state.instance) return;
+  if (location === PIP_LOCATION && state.pipWindow) {
+    startPipLoop(state, state.pipWindow);
+    return;
+  }
+  state.instance.start();
 };
 
 const kawarps = new Map<string, KawarpState>();
@@ -294,6 +348,13 @@ const findPlayableVideo = (): HTMLVideoElement | null => {
   if (isPlayable(playerVideo)) return playerVideo;
   const animatedArt = document.querySelector<HTMLVideoElement>(ANIMATED_ART_VIDEO_SELECTOR);
   return isPlayable(animatedArt) ? animatedArt : null;
+};
+
+// The floating window's mirrored video is in the PiP document and keeps producing frames even
+// when the opener is minimized. Sampling the opener's player video there would freeze the effect.
+const findPipPlayableVideo = (state: KawarpState): HTMLVideoElement | null => {
+  const stage = state.pipWindow?.document.querySelector<HTMLVideoElement>("video.blyrics-pip-stage__video");
+  return stage && stage.srcObject && isPlayable(stage) ? stage : null;
 };
 
 const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: GradientSettings): void => {
@@ -406,7 +467,10 @@ const syncVideoSources = (): void => {
   if (!videoWanted) return;
   const playableVideo = anyVisible ? findPlayableVideo() : null;
   const now = performance.now();
-  for (const [location, state] of kawarps) syncVideoSource(state, location, playableVideo, now);
+  for (const [location, state] of kawarps) {
+    const source = location === PIP_LOCATION ? findPipPlayableVideo(state) ?? playableVideo : playableVideo;
+    syncVideoSource(state, location, source, now);
+  }
 };
 
 const startVideoWatcher = (): void => {
@@ -703,7 +767,7 @@ export const createKawarp = async (
     }
   }
 
-  state.instance.start();
+  startKawarpLoop(state, location);
   state.isTransitioning = false;
   processQueuedImage(state, location);
   startVideoWatcher();
@@ -717,9 +781,9 @@ export const createKawarp = async (
         state.isVisible = isVisible;
         if (state.instance) {
           if (isVisible) {
-            state.instance.start();
+            startKawarpLoop(state, location);
           } else {
-            state.instance.stop();
+            stopKawarpLoop(state);
           }
         }
       }
@@ -772,10 +836,12 @@ export const destroyKawarp = (location?: string): void => {
       state.observer = null;
     }
     if (state.instance) {
-      state.instance.stop();
+      stopKawarpLoop(state);
       state.instance.dispose();
       state.instance = null;
     }
+    state.pipWindow = null;
+    state.pipAnimationId = null;
     if (state.container) {
       state.container.remove();
       state.container = null;
@@ -1015,7 +1081,7 @@ export const resumeKawarp = (location?: string): void => {
     if (!state.instance || !state.isVisible || !state.isPaused) return;
 
     state.isPaused = false;
-    state.instance.start();
+    startKawarpLoop(state, loc);
 
     const settings = state.lastSettings ?? DEFAULT_GRADIENT_SETTINGS;
     state.targetSpeed = modeMotion(state, settings, state.lastMultipliers ?? DEFAULT_DYNAMIC_MULTIPLIERS).speed;
@@ -1102,7 +1168,7 @@ export const createPipKawarp = async (
       }
     }
 
-    state.instance.start();
+    startPipLoop(state, pipWindow);
     state.container.style.opacity = String(isVideoMode(state) ? settings.videoOpacity : settings.kawarpOpacity);
     startVideoWatcher();
 

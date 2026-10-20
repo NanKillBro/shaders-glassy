@@ -3,6 +3,10 @@ import { logger } from "@/shared/utils/logger";
 import * as kawarpManager from "./kawarpManager";
 
 const PIP_OPEN_ATTRIBUTE = "blyrics-pip-open";
+// Better Lyrics' Electron fallback opens a same-origin scripted window with this name; Electron's
+// documentPictureInPicture resolves without a native window, so documentPictureInPicture.window is
+// null there. A window name is the only handle that crosses extension isolated worlds.
+const SCRIPTED_WINDOW_NAME = "blyrics-pip";
 const SHELL_SELECTOR = ".blyrics-pip-shell";
 const ART_PROPERTY = "--blyrics-pip-art";
 const BACKDROP_SELECTOR = ".blyrics-pip-backdrop";
@@ -23,6 +27,17 @@ const canScript = (pipWindow: Window): boolean => {
     return !!pipWindow.document.body;
   } catch {
     return false;
+  }
+};
+
+const findScriptedWindow = (): Window | null => {
+  if (!document.documentElement.hasAttribute(PIP_OPEN_ATTRIBUTE)) return null;
+
+  try {
+    const pipWindow = window.open("", SCRIPTED_WINDOW_NAME);
+    return pipWindow && !pipWindow.closed ? pipWindow : null;
+  } catch {
+    return null;
   }
 };
 
@@ -112,13 +127,13 @@ const isPipEffectWanted = (): boolean =>
 // window that can never tear itself down. Keep this call adjacent to the pagehide registration
 // below: the stretch between them must stay synchronous for that guarantee to hold.
 const canFinishMount = (pipWindow: Window): boolean =>
-  !pipWindow.closed && window.documentPictureInPicture?.window === pipWindow && isPipEffectWanted();
+  !pipWindow.closed && isPipEffectWanted() && (window.documentPictureInPicture?.window ?? pipWindow) === pipWindow;
 
 // `session` is only assigned after two awaits, so it cannot guard against a second entry on its own.
 const mount = async (): Promise<void> => {
   if (session || isMounting || isWindowUnreachable || !getSettings || !getMultipliers) return;
 
-  const pipWindow = window.documentPictureInPicture?.window;
+  const pipWindow = window.documentPictureInPicture?.window ?? findScriptedWindow();
   if (!pipWindow) return;
 
   if (!canScript(pipWindow)) {
