@@ -48,6 +48,8 @@ export interface GradientSettings {
   // Performance optimizations (opt-in)
   perfFastDomLookup: boolean;
   perfSkipRedundantFilter: boolean;
+  perfThrottleVideoBrightness: boolean;
+  perfCapVideoFrameRate: boolean;
 }
 
 export interface DynamicMultipliers {
@@ -106,6 +108,8 @@ export const DEFAULT_GRADIENT_SETTINGS: GradientSettings = {
   // Performance optimizations (opt-in)
   perfFastDomLookup: false,
   perfSkipRedundantFilter: false,
+  perfThrottleVideoBrightness: false,
+  perfCapVideoFrameRate: false,
 };
 
 export const DEFAULT_DYNAMIC_MULTIPLIERS: DynamicMultipliers = {

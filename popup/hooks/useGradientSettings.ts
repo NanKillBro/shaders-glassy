@@ -175,6 +175,8 @@ export const useGradientSettings = (locked = false) => {
               "videoAudioResponsive",
               "perfFastDomLookup",
               "perfSkipRedundantFilter",
+              "perfThrottleVideoBrightness",
+              "perfCapVideoFrameRate",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {

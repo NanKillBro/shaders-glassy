@@ -53,6 +53,8 @@ interface KawarpState {
   pipAnimationId: number | null;
   lastAppliedTransition: string | null;
   lastAppliedFilter: string | null;
+  lastAppliedBrightness: number | null;
+  brightnessSampledSrc?: string | null;
 }
 
 const createEmptyState = (): KawarpState => ({
@@ -83,11 +85,13 @@ const createEmptyState = (): KawarpState => ({
   failedVideoSrc: null,
   brightnessSampledAt: 0,
   brightnessSampledTime: -1,
+  brightnessSampledSrc: null,
   stopWatchingOutput: null,
   pipWindow: null,
   pipAnimationId: null,
   lastAppliedTransition: null,
   lastAppliedFilter: null,
+  lastAppliedBrightness: null,
 });
 
 const SCALE_LERP_UP = 0.5;
@@ -108,6 +112,9 @@ const VIDEO_WATCH_INTERVAL_MS = 100;
 const VIDEO_UNAVAILABLE_GRACE_MS = 1500;
 const ZOOM_LERP_MIN = 0.01;
 const ZOOM_LERP_MAX = 1;
+const VIDEO_BRIGHTNESS_DEADBAND = 0.01;
+export const OPTIMIZED_VIDEO_BRIGHTNESS_INTERVAL_MS = 400;
+export const OPTIMIZED_VIDEO_SAMPLE_FPS = 24;
 
 const isVideoMode = (state: KawarpState): boolean => state.videoMode && !!state.lastSettings?.videoEnabled;
 const hasHdrDisplay = (canvas: HTMLCanvasElement): boolean =>
@@ -204,13 +211,25 @@ export const applyArtworkBrightness = (state: KawarpState, transitionMs?: number
   if (!settings.perfSkipRedundantFilter) {
     state.lastAppliedTransition = null;
     state.lastAppliedFilter = null;
+    state.lastAppliedBrightness = null;
     state.container.style.transition = nextTransition;
     state.container.style.filter = rawBrightness < 1 ? `brightness(${rawBrightness})` : "";
     return;
   }
 
   const brightness = rawBrightness < 1 ? Math.round(rawBrightness * 1000) / 1000 : 1;
-  const nextFilter = brightness < 1 ? `brightness(${brightness})` : "";
+  const skipVideoDeadband =
+    video &&
+    transitionMs === undefined &&
+    brightness < 1 &&
+    state.lastAppliedBrightness != null &&
+    state.lastAppliedBrightness < 1 &&
+    Math.abs(brightness - state.lastAppliedBrightness) < VIDEO_BRIGHTNESS_DEADBAND;
+  const nextFilter = skipVideoDeadband
+    ? state.lastAppliedFilter ?? ""
+    : brightness < 1
+      ? `brightness(${brightness})`
+      : "";
   if (state.lastAppliedTransition !== nextTransition) {
     state.container.style.transition = nextTransition;
     state.lastAppliedTransition = nextTransition;
@@ -218,6 +237,9 @@ export const applyArtworkBrightness = (state: KawarpState, transitionMs?: number
   if (state.lastAppliedFilter !== nextFilter) {
     state.container.style.filter = nextFilter;
     state.lastAppliedFilter = nextFilter;
+  }
+  if (!skipVideoDeadband) {
+    state.lastAppliedBrightness = brightness;
   }
 };
 
@@ -345,7 +367,7 @@ const canSampleForState = (state: KawarpState): boolean =>
   state.container.ownerDocument.visibilityState === "visible";
 
 // Kawarp replaces every option on each loadVideo call, so the error handler must ride along each time.
-const videoSourceOptions = (
+export const videoSourceOptions = (
   state: KawarpState,
   video: HTMLVideoElement,
   settings: GradientSettings
@@ -353,7 +375,10 @@ const videoSourceOptions = (
   sampleWidth: settings.videoSampleWidth,
   sampleHeight: settings.videoSampleHeight,
   downsampleFactor: settings.videoDownsampleFactor,
-  frameRate: settings.videoFrameRate,
+  frameRate:
+    settings.perfCapVideoFrameRate && settings.videoFrameRate === 0
+      ? OPTIMIZED_VIDEO_SAMPLE_FPS
+      : settings.videoFrameRate,
   smoothing: settings.videoColorResponse,
   onError: error => {
     logger.error("Video ambient colors unavailable for this source:", error);
@@ -482,6 +507,8 @@ const followVideo = (state: KawarpState, video: HTMLVideoElement, settings: Grad
   state.videoMode = true;
   state.highlightLuminance = null;
   state.brightnessSampledAt = 0;
+  state.brightnessSampledTime = -1;
+  state.brightnessSampledSrc = null;
   applyModeSettings(state);
   applyArtworkBrightness(state);
   logger.log("Following video", {
@@ -506,17 +533,27 @@ const leaveVideoMode = (state: KawarpState, location: string): void => {
   if (artwork) void resolveImageUrl(artwork).then(url => processImageTransition(state, url, location));
 };
 
-const sampleVideoBrightness = (state: KawarpState, now: number): void => {
+export const sampleVideoBrightness = (state: KawarpState, now: number): void => {
   const instance = state.instance;
   const settings = state.lastSettings;
   const video = state.videoSource;
   if (!instance || !settings?.autoDimBrightArtwork || !video) return;
-  if (now - state.brightnessSampledAt < settings.videoBrightnessInterval) return;
+  const minInterval = settings.perfThrottleVideoBrightness
+    ? Math.max(settings.videoBrightnessInterval, OPTIMIZED_VIDEO_BRIGHTNESS_INTERVAL_MS)
+    : settings.videoBrightnessInterval;
+  if (now - state.brightnessSampledAt < minInterval) return;
   // A paused frame only changes after a seek, so re-measure once it has settled.
   if (video.seeking) return;
-  if (video.paused && state.highlightLuminance !== null && video.currentTime === state.brightnessSampledTime) return;
+  const sameSrc = (state.brightnessSampledSrc ?? "") === (video.currentSrc ?? "");
+  const unchangedFrame =
+    (settings.perfThrottleVideoBrightness || video.paused) &&
+    state.highlightLuminance !== null &&
+    video.currentTime === state.brightnessSampledTime &&
+    sameSrc;
+  if (unchangedFrame) return;
   state.brightnessSampledAt = now;
   state.brightnessSampledTime = video.currentTime;
+  state.brightnessSampledSrc = video.currentSrc ?? "";
   void instance.sampleSource(settings.videoBrightnessSampleSize).then(pixels => {
     if (!pixels || state.instance !== instance || !state.videoMode) return;
     state.highlightLuminance = measureHighlightLuminance(
@@ -976,6 +1013,7 @@ export const destroyKawarp = (location?: string): void => {
     state.isPaused = false;
     state.lastAppliedTransition = null;
     state.lastAppliedFilter = null;
+    state.lastAppliedBrightness = null;
 
     kawarps.delete(location);
     if (!Array.from(kawarps.values()).some(state => state.instance)) {

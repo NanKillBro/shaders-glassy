@@ -33,6 +33,8 @@ export const UNLOCKED_SETTING_KEYS = [
   "showLogs",
   "perfFastDomLookup",
   "perfSkipRedundantFilter",
+  "perfThrottleVideoBrightness",
+  "perfCapVideoFrameRate",
 ] as const satisfies readonly (keyof GradientSettings)[];
 
 /** Defaults for every locked key, with the unlocked ones left out. */

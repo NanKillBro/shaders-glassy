@@ -260,17 +260,23 @@ function createMockDocument() {
 test("performance toggles default off and remain editable under theme lock", () => {
   assert.equal(DEFAULT_GRADIENT_SETTINGS.perfFastDomLookup, false);
   assert.equal(DEFAULT_GRADIENT_SETTINGS.perfSkipRedundantFilter, false);
+  assert.equal(DEFAULT_GRADIENT_SETTINGS.perfThrottleVideoBrightness, false);
+  assert.equal(DEFAULT_GRADIENT_SETTINGS.perfCapVideoFrameRate, false);
 
   const customPerf = {
     ...DEFAULT_GRADIENT_SETTINGS,
     perfFastDomLookup: true,
     perfSkipRedundantFilter: true,
+    perfThrottleVideoBrightness: true,
+    perfCapVideoFrameRate: true,
   };
   assert.equal(isThemeLockSatisfied(customPerf), true);
 
   const locked = applyThemeLock({ ...customPerf, kawarpOpacity: 0.1 });
   assert.equal(locked.perfFastDomLookup, true);
   assert.equal(locked.perfSkipRedundantFilter, true);
+  assert.equal(locked.perfThrottleVideoBrightness, true);
+  assert.equal(locked.perfCapVideoFrameRate, true);
   assert.equal(locked.kawarpOpacity, DEFAULT_GRADIENT_SETTINGS.kawarpOpacity);
 });
 
@@ -435,4 +441,144 @@ test("applyArtworkBrightness skips redundant writes & quantizes brightness when 
   kawarpManager.applyArtworkBrightness(onState);
   assert.equal(container._styleCounts.transition - prevTransitionWrites, 2);
   assert.equal(container._styleCounts.filter - prevFilterWrites, 2);
+
+  // Sub-1% video brightness jitter is ignored without explicit transition override.
+  container.style.opacity = "0.8";
+  onState.lastAppliedBrightness = null;
+  onState.highlightLuminance = 0.9; // brightness = 0.76 / 0.9 = 0.844
+  kawarpManager.applyArtworkBrightness(onState);
+  const afterInitialWrite = container._styleCounts.filter;
+
+  for (const lum of [0.895, 0.905, 0.892, 0.908]) {
+    onState.highlightLuminance = lum; // ~0.837..0.852 (< 0.01 delta from 0.844)
+    kawarpManager.applyArtworkBrightness(onState);
+  }
+  assert.equal(container._styleCounts.filter, afterInitialWrite);
+
+  // >= 1% brightness shift applies when delta crosses deadband.
+  onState.highlightLuminance = 0.95; // 0.76 / 0.95 = 0.800 (delta 0.044 >= 0.01)
+  kawarpManager.applyArtworkBrightness(onState);
+  assert.equal(container._styleCounts.filter, afterInitialWrite + 1);
+
+  // Explicit setting-change transitionMs bypasses the video deadband immediately.
+  onState.highlightLuminance = 0.955; // 0.796 (< 0.01 delta)
+  kawarpManager.applyArtworkBrightness(onState, 150);
+  assert.equal(container._styleCounts.filter, afterInitialWrite + 2);
+});
+
+test("videoSourceOptions caps auto frameRate at 24 fps when opt-in enabled", () => {
+  const state = { videoSource: null, failedVideoSrc: null };
+  const video = { currentSrc: "https://example.com/v.mp4" };
+
+  const legacyOpts = kawarpManager.videoSourceOptions(state, video, {
+    ...DEFAULT_GRADIENT_SETTINGS,
+    videoFrameRate: 0,
+    perfCapVideoFrameRate: false,
+  });
+  assert.equal(legacyOpts.frameRate, 0);
+
+  const cappedAutoOpts = kawarpManager.videoSourceOptions(state, video, {
+    ...DEFAULT_GRADIENT_SETTINGS,
+    videoFrameRate: 0,
+    perfCapVideoFrameRate: true,
+  });
+  assert.equal(cappedAutoOpts.frameRate, kawarpManager.OPTIMIZED_VIDEO_SAMPLE_FPS);
+  assert.equal(cappedAutoOpts.frameRate, 24);
+  assert.equal(cappedAutoOpts.smoothing, DEFAULT_GRADIENT_SETTINGS.videoColorResponse);
+
+  const explicitFpsOpts = kawarpManager.videoSourceOptions(state, video, {
+    ...DEFAULT_GRADIENT_SETTINGS,
+    videoFrameRate: 30,
+    perfCapVideoFrameRate: true,
+  });
+  assert.equal(explicitFpsOpts.frameRate, 30);
+});
+
+test("sampleVideoBrightness throttles PBO polling and skips duplicate video timestamps when opt-in enabled", async () => {
+  const doc = createMockDocument();
+  const container = doc.createElement("div", "better-lyrics-kawarp-player");
+  container.style.opacity = "0.8";
+
+  let sampleCalls = 0;
+  const fakePixels = new Uint8ClampedArray([180, 180, 180, 255]);
+  const video = {
+    seeking: false,
+    paused: false,
+    currentTime: 0,
+    currentSrc: "https://example.com/a.mp4",
+  };
+  const instance = {
+    sampleSource: () => {
+      sampleCalls++;
+      return Promise.resolve(fakePixels);
+    },
+  };
+
+  const makeState = (perfThrottleVideoBrightness, videoBrightnessInterval = 100) => ({
+    container,
+    instance,
+    videoMode: true,
+    videoSource: video,
+    highlightLuminance: null,
+    brightnessSampledAt: 0,
+    brightnessSampledTime: -1,
+    brightnessSampledSrc: null,
+    lastAppliedTransition: null,
+    lastAppliedFilter: null,
+    lastAppliedBrightness: null,
+    lastSettings: {
+      ...DEFAULT_GRADIENT_SETTINGS,
+      autoDimBrightArtwork: true,
+      videoBrightnessInterval,
+      perfThrottleVideoBrightness,
+    },
+  });
+
+  // Legacy OFF: polls every 100ms even if currentTime stays identical while not paused.
+  const offState = makeState(false, 100);
+  kawarpManager.sampleVideoBrightness(offState, 1000);
+  await Promise.resolve();
+  kawarpManager.sampleVideoBrightness(offState, 1100);
+  kawarpManager.sampleVideoBrightness(offState, 1200);
+  assert.equal(sampleCalls, 3);
+
+  // Opt-in ON: enforces >= 400ms minimum interval and skips identical currentTime + currentSrc.
+  sampleCalls = 0;
+  const onState = makeState(true, 100);
+  kawarpManager.sampleVideoBrightness(onState, 1000);
+  await Promise.resolve();
+  assert.equal(sampleCalls, 1);
+
+  // Within 400ms window -> skipped even if currentTime advances.
+  video.currentTime = 0.25;
+  kawarpManager.sampleVideoBrightness(onState, 1250);
+  assert.equal(sampleCalls, 1);
+
+  // Past 400ms window with identical currentTime & src -> still skipped (stalled/buffering).
+  video.currentTime = 0;
+  kawarpManager.sampleVideoBrightness(onState, 1500);
+  assert.equal(sampleCalls, 1);
+
+  // Advancing currentTime past 400ms window -> samples once.
+  video.currentTime = 0.5;
+  kawarpManager.sampleVideoBrightness(onState, 1500);
+  await Promise.resolve();
+  assert.equal(sampleCalls, 2);
+
+  // Switching track source even at matching timestamp -> samples immediately once interval elapsed.
+  video.currentSrc = "https://example.com/b.mp4";
+  kawarpManager.sampleVideoBrightness(onState, 1900);
+  await Promise.resolve();
+  assert.equal(sampleCalls, 3);
+
+  // Explicit longer interval > 400ms is never shortened.
+  sampleCalls = 0;
+  const slowState = makeState(true, 800);
+  kawarpManager.sampleVideoBrightness(slowState, 2000);
+  await Promise.resolve();
+  video.currentTime = 1.0;
+  kawarpManager.sampleVideoBrightness(slowState, 2500);
+  assert.equal(sampleCalls, 1);
+  kawarpManager.sampleVideoBrightness(slowState, 2800);
+  assert.equal(sampleCalls, 2);
 });

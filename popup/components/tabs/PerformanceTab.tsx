@@ -24,5 +24,19 @@ export const PerformanceTab: React.FC<PerformanceTabProps> = ({ settings, onTogg
       value={settings.perfSkipRedundantFilter}
       onChange={value => onToggleChange("perfSkipRedundantFilter", value)}
     />
+    <ControlToggle
+      label="Throttle video brightness PBO polling"
+      hint="Clamp luminance sampling to ≥400ms and skip duplicate video timestamps."
+      tooltip="Raises the minimum GPU pixel-readback interval (sampleSource / gl.getBufferSubData) during video mode from 100ms to 400ms and skips re-sampling when video.currentTime is unchanged after the initial readback. Trade-off: auto-dim luminance reacts up to ~400ms slower to sudden scene brightness changes."
+      value={settings.perfThrottleVideoBrightness}
+      onChange={value => onToggleChange("perfThrottleVideoBrightness", value)}
+    />
+    <ControlToggle
+      label="Cap unthrottled video texture uploads at 24 fps"
+      hint="Limit automatic video shader sampling (frameRate: 0) to 24 fps."
+      tooltip="When Video FPS is set to Auto (0), passes frameRate: 24 into @kawarp/core so high-framerate music videos upload background textures at 24 fps instead of 60 fps while preserving color smoothing. Explicit non-zero FPS settings are left untouched. Trade-off: background color transitions follow fast video cuts at 24 fps instead of full video rate."
+      value={settings.perfCapVideoFrameRate}
+      onChange={value => onToggleChange("perfCapVideoFrameRate", value)}
+    />
   </div>
 );
