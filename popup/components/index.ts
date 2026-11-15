@@ -8,4 +8,4 @@ export { TabBar } from "./TabBar";
 export { ThemeLockNotice } from "./ThemeLockNotice";
 export { Tooltip } from "./Tooltip";
 
-export { AboutTab, AudioTab, ExtrasTab, GeneralTab, LookTab, MotionTab, VideoTab } from "./tabs";
+export { AboutTab, AudioTab, ExtrasTab, GeneralTab, LookTab, MotionTab, PerformanceTab, VideoTab } from "./tabs";

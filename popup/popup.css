@@ -358,6 +358,7 @@ body {
 .row__text {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   min-width: 0;
 }
@@ -365,6 +366,12 @@ body {
 .row__label {
   font-size: 13px;
   font-weight: 500;
+}
+
+.row__label--tooltip {
+  text-decoration: underline dotted rgba(255, 255, 255, 0.3);
+  text-underline-offset: 3px;
+  cursor: help;
 }
 
 .row__hint {

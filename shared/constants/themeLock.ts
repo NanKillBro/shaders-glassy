@@ -26,9 +26,14 @@ export const POPUP_LOCK_HASH = "#glassy-locked";
 
 /**
  * Settings that stay editable under the lock. Only the *visuals* are managed by the
- * theme; debug logging is a troubleshooting aid with no bearing on how the theme looks.
+ * theme; debug logging and opt-in runtime performance toggles have no bearing on how
+ * the theme looks.
  */
-export const UNLOCKED_SETTING_KEYS = ["showLogs"] as const satisfies readonly (keyof GradientSettings)[];
+export const UNLOCKED_SETTING_KEYS = [
+  "showLogs",
+  "perfFastDomLookup",
+  "perfSkipRedundantFilter",
+] as const satisfies readonly (keyof GradientSettings)[];
 
 /** Defaults for every locked key, with the unlocked ones left out. */
 const LOCKED_DEFAULTS: Partial<GradientSettings> = (() => {

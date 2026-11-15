@@ -12,6 +12,7 @@ import {
   LookTab,
   MotionTab,
   NowPlaying,
+  PerformanceTab,
   TabBar,
   ThemeLockNotice,
   VideoTab,
@@ -71,6 +72,7 @@ const Popup: React.FC = () => {
     motion: <MotionTab {...sliderProps} />,
     video: <VideoTab {...sliderProps} onToggleChange={handleToggleChange} />,
     audio: <AudioTab {...sliderProps} onToggleChange={handleToggleChange} />,
+    performance: <PerformanceTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
     // Debug logs and the artwork cache tools stay usable for troubleshooting.
     extras: <ExtrasTab settings={gradientSettings} onToggleChange={handleToggleChange} />,
   };

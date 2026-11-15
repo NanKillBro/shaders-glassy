@@ -12,6 +12,7 @@ const TAB_LABELS: Record<SettingsTab, string> = {
   motion: "Motion",
   video: "Video",
   audio: "Audio",
+  performance: "Perf",
   extras: "Extras",
 };
 

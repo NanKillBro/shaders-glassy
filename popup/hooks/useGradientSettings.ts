@@ -173,6 +173,8 @@ export const useGradientSettings = (locked = false) => {
               "autoDimBrightArtwork",
               "videoEnabled",
               "videoAudioResponsive",
+              "perfFastDomLookup",
+              "perfSkipRedundantFilter",
             ];
 
             const isValid = Object.entries(mergedImport).every(([key, value]) => {

@@ -5,6 +5,7 @@ import {
 } from "@/shared/constants/gradientSettings";
 import { applyThemeLock, isPageThemeLocked, isThemeLockSatisfied } from "@/shared/constants/themeLock";
 import { logger } from "@/shared/utils/logger";
+import * as adState from "./adState";
 import * as animatedArtManager from "./animatedArtManager";
 import * as audioAnalysis from "./audioAnalysis";
 import * as kawarpManager from "./kawarpManager";
@@ -193,6 +194,8 @@ export const updateGradientSettings = async (incomingSettings: GradientSettings)
 
   logger.setEnabled(settings.showLogs);
   audioAnalysis.setAudioLogging(settings.showLogs);
+  adState.setFastDomLookupEnabled(settings.perfFastDomLookup);
+  kawarpManager.setFastDomLookupEnabled(settings.perfFastDomLookup);
 
   if (wasEnabled !== settings.enabled) {
     if (!settings.enabled) {
@@ -240,12 +243,15 @@ export const initializeSettings = async (): Promise<GradientSettings> => {
   logger.setEnabled(gradientSettings.showLogs);
 
   // Under the lock the customised values are wiped, not merely ignored, so storage
-  // always matches what the popup shows. `showLogs` survives — see themeLock.ts.
+  // always matches what the popup shows. `showLogs` and opt-in perf flags survive — see themeLock.ts.
   if (isPageThemeLocked() && !isThemeLockSatisfied(gradientSettings)) {
     logger.log("Glassy theme lock active - resetting stored effect settings to defaults");
     gradientSettings = applyThemeLock(gradientSettings);
     await storage.saveGradientSettings(gradientSettings);
   }
+
+  adState.setFastDomLookupEnabled(gradientSettings.perfFastDomLookup);
+  kawarpManager.setFastDomLookupEnabled(gradientSettings.perfFastDomLookup);
 
   audioAnalysis.setPlaybackStateCallback(handlePlaybackStateChange);
   await animatedArtManager.initialize(gradientSettings.enableAnimatedArt);
@@ -269,5 +275,7 @@ export const hasActiveEffect = (): boolean => {
 export const cleanup = (): void => {
   audioAnalysis.stopAudioAnalysis();
   kawarpManager.destroyKawarp();
+  kawarpManager.resetVideoLookupCache();
+  adState.resetAdStateCache();
   animatedArtManager.cleanup();
 };

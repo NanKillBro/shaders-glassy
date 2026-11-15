@@ -5,6 +5,7 @@ import {
   type GradientSettings,
 } from "@/shared/constants/gradientSettings";
 import {
+  ANIMATED_ART_VIDEO_ID,
   ANIMATED_ART_VIDEO_SELECTOR,
   PLAYER_BAR_THUMBNAIL_CONTAINER_SELECTOR,
   PLAYER_VIDEO_SELECTOR,
@@ -50,6 +51,8 @@ interface KawarpState {
   // constructed it (this content script's window), which stops when the main window is minimized.
   pipWindow: Window | null;
   pipAnimationId: number | null;
+  lastAppliedTransition: string | null;
+  lastAppliedFilter: string | null;
 }
 
 const createEmptyState = (): KawarpState => ({
@@ -83,6 +86,8 @@ const createEmptyState = (): KawarpState => ({
   stopWatchingOutput: null,
   pipWindow: null,
   pipAnimationId: null,
+  lastAppliedTransition: null,
+  lastAppliedFilter: null,
 });
 
 const SCALE_LERP_UP = 0.5;
@@ -181,7 +186,7 @@ const loadImageSafely = async (instance: Kawarp, url: string): Promise<void> => 
   }
 };
 
-const applyArtworkBrightness = (state: KawarpState, transitionMs?: number): void => {
+export const applyArtworkBrightness = (state: KawarpState, transitionMs?: number): void => {
   if (!state.container || !state.lastSettings) return;
   const settings = state.lastSettings;
   const video = isVideoMode(state);
@@ -189,13 +194,31 @@ const applyArtworkBrightness = (state: KawarpState, transitionMs?: number): void
   const filterTransitionMs = video
     ? settings.videoBrightnessTransition
     : transitionMs ?? settings.kawarpTransitionDuration;
-  const brightness =
+  const rawBrightness =
     settings.autoDimBrightArtwork && state.highlightLuminance !== null
       ? brightnessForHighlight(state.highlightLuminance, autoDimStrength)
       : 1;
   const isHidden = state.container.style.opacity === "0";
-  state.container.style.transition = `opacity 0.5s ease-out, filter ${isHidden ? 0 : filterTransitionMs}ms ${KAWARP_CROSSFADE_EASING}`;
-  state.container.style.filter = brightness < 1 ? `brightness(${brightness})` : "";
+  const nextTransition = `opacity 0.5s ease-out, filter ${isHidden ? 0 : filterTransitionMs}ms ${KAWARP_CROSSFADE_EASING}`;
+
+  if (!settings.perfSkipRedundantFilter) {
+    state.lastAppliedTransition = null;
+    state.lastAppliedFilter = null;
+    state.container.style.transition = nextTransition;
+    state.container.style.filter = rawBrightness < 1 ? `brightness(${rawBrightness})` : "";
+    return;
+  }
+
+  const brightness = rawBrightness < 1 ? Math.round(rawBrightness * 1000) / 1000 : 1;
+  const nextFilter = brightness < 1 ? `brightness(${brightness})` : "";
+  if (state.lastAppliedTransition !== nextTransition) {
+    state.container.style.transition = nextTransition;
+    state.lastAppliedTransition = nextTransition;
+  }
+  if (state.lastAppliedFilter !== nextFilter) {
+    state.container.style.filter = nextFilter;
+    state.lastAppliedFilter = nextFilter;
+  }
 };
 
 const loadArtwork = async (state: KawarpState, instance: Kawarp, url: string): Promise<void> => {
@@ -342,11 +365,95 @@ const videoSourceOptions = (
 const isPlayable = (video: HTMLVideoElement | null): video is HTMLVideoElement =>
   !!video && !video.error && video.videoWidth > 0;
 
-const findPlayableVideo = (): HTMLVideoElement | null => {
-  if (isAdPlaying()) return null;
-  const playerVideo = document.querySelector<HTMLVideoElement>(PLAYER_VIDEO_SELECTOR);
+let fastDomLookupEnabled = false;
+let cachedPlayerVideo: HTMLVideoElement | null = null;
+let cachedMoviePlayer: Element | null = null;
+let cachedAnimatedArt: HTMLVideoElement | null = null;
+let playerVideoDirty = true;
+let moviePlayerObserver: MutationObserver | null = null;
+
+export const resetVideoLookupCache = (): void => {
+  moviePlayerObserver?.disconnect();
+  moviePlayerObserver = null;
+  cachedPlayerVideo = null;
+  cachedMoviePlayer = null;
+  cachedAnimatedArt = null;
+  playerVideoDirty = true;
+};
+
+export const setFastDomLookupEnabled = (enabled: boolean): void => {
+  if (fastDomLookupEnabled === enabled) return;
+  fastDomLookupEnabled = enabled;
+  if (!enabled) {
+    resetVideoLookupCache();
+  }
+};
+
+const getCachedPlayerVideo = (doc: Document): HTMLVideoElement | null => {
+  if (cachedMoviePlayer && cachedMoviePlayer.ownerDocument !== doc) {
+    resetVideoLookupCache();
+  }
+  if (typeof moviePlayerObserver?.takeRecords === "function" && moviePlayerObserver.takeRecords().length > 0) {
+    playerVideoDirty = true;
+  }
+  if (
+    cachedPlayerVideo &&
+    (!cachedPlayerVideo.isConnected ||
+      cachedPlayerVideo.id === ANIMATED_ART_VIDEO_ID ||
+      !cachedMoviePlayer?.isConnected ||
+      !cachedMoviePlayer.contains(cachedPlayerVideo))
+  ) {
+    playerVideoDirty = true;
+  } else if (!cachedMoviePlayer?.isConnected) {
+    playerVideoDirty = true;
+  }
+
+  if (playerVideoDirty) {
+    const nextMoviePlayer = doc.getElementById("movie_player");
+    if (nextMoviePlayer !== cachedMoviePlayer) {
+      moviePlayerObserver?.disconnect();
+      moviePlayerObserver = null;
+      cachedMoviePlayer = nextMoviePlayer;
+      const ObserverCtor = doc.defaultView?.MutationObserver ?? globalThis.MutationObserver;
+      if (cachedMoviePlayer && ObserverCtor) {
+        moviePlayerObserver = new ObserverCtor(() => {
+          playerVideoDirty = true;
+        });
+        moviePlayerObserver.observe(cachedMoviePlayer, { childList: true, subtree: true });
+      }
+    }
+    cachedPlayerVideo = cachedMoviePlayer
+      ? cachedMoviePlayer.querySelector<HTMLVideoElement>(`video:not(#${ANIMATED_ART_VIDEO_ID})`)
+      : null;
+    playerVideoDirty = false;
+  }
+
+  return cachedPlayerVideo;
+};
+
+const getCachedAnimatedArt = (doc: Document): HTMLVideoElement | null => {
+  if (cachedAnimatedArt && cachedAnimatedArt.ownerDocument !== doc) {
+    cachedAnimatedArt = null;
+  }
+  if (cachedAnimatedArt?.isConnected && cachedAnimatedArt.id === ANIMATED_ART_VIDEO_ID) {
+    return cachedAnimatedArt;
+  }
+  const el = doc.getElementById(ANIMATED_ART_VIDEO_ID);
+  cachedAnimatedArt = el?.tagName.toUpperCase() === "VIDEO" ? (el as HTMLVideoElement) : null;
+  return cachedAnimatedArt;
+};
+
+export const findPlayableVideo = (doc: Document = document): HTMLVideoElement | null => {
+  if (isAdPlaying(doc)) return null;
+  if (!fastDomLookupEnabled) {
+    const playerVideo = doc.querySelector<HTMLVideoElement>(PLAYER_VIDEO_SELECTOR);
+    if (isPlayable(playerVideo)) return playerVideo;
+    const animatedArt = doc.querySelector<HTMLVideoElement>(ANIMATED_ART_VIDEO_SELECTOR);
+    return isPlayable(animatedArt) ? animatedArt : null;
+  }
+  const playerVideo = getCachedPlayerVideo(doc);
   if (isPlayable(playerVideo)) return playerVideo;
-  const animatedArt = document.querySelector<HTMLVideoElement>(ANIMATED_ART_VIDEO_SELECTOR);
+  const animatedArt = getCachedAnimatedArt(doc);
   return isPlayable(animatedArt) ? animatedArt : null;
 };
 
@@ -483,6 +590,7 @@ const stopVideoWatcher = (): void => {
   if (videoWatcherId === null) return;
   window.clearInterval(videoWatcherId);
   videoWatcherId = null;
+  resetVideoLookupCache();
 };
 
 const getKawarpState = (location: string): KawarpState => {
@@ -866,6 +974,8 @@ export const destroyKawarp = (location?: string): void => {
     state.currentSpeed = 1;
     state.targetSpeed = 1;
     state.isPaused = false;
+    state.lastAppliedTransition = null;
+    state.lastAppliedFilter = null;
 
     kawarps.delete(location);
     if (!Array.from(kawarps.values()).some(state => state.instance)) {
